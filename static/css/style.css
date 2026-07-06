@@ -1,0 +1,180 @@
+:root {
+  color-scheme: light dark;
+  --bg: #0f1216;
+  --panel: #171b21;
+  --panel-2: #1e232b;
+  --border: #2a303a;
+  --text: #e6e9ee;
+  --muted: #93a0b3;
+  --accent: #5eb0ff;
+  --live: #38c977;
+  --key: #f0a340;
+  --error: #ff6b6b;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f7fa;
+    --panel: #ffffff;
+    --panel-2: #eef1f5;
+    --border: #dde2e8;
+    --text: #1a1f27;
+    --muted: #5b6672;
+    --accent: #1668d6;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.topbar {
+  padding: 2rem 2rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar h1 { margin: 0 0 0.4rem; font-size: 1.6rem; }
+.subtitle { margin: 0; color: var(--muted); max-width: 60rem; font-size: 0.95rem; }
+
+.search-bar {
+  display: flex;
+  gap: 0.6rem;
+  padding: 1.2rem 2rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-wrap: wrap;
+}
+
+#target {
+  flex: 1;
+  min-width: 16rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+#input-type, #keys-btn, .actions button, .modal-actions button {
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+#keys-btn:hover, .actions button:hover, .modal-actions button:hover {
+  border-color: var(--accent);
+}
+
+main { padding: 1.5rem 2rem 3rem; }
+
+.category h2 {
+  font-size: 1.15rem;
+  border-left: 4px solid var(--accent);
+  padding-left: 0.6rem;
+  margin: 1.8rem 0 0.9rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.9rem;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.card h3 { margin: 0; font-size: 1.05rem; }
+.card .desc { margin: 0; color: var(--muted); font-size: 0.85rem; flex-grow: 1; }
+
+.badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
+.badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.badge-live { color: var(--live); border-color: var(--live); }
+.badge-key { color: var(--key); border-color: var(--key); }
+.badge-muted { opacity: 0.7; }
+
+.actions { display: flex; gap: 0.5rem; }
+.actions button { flex: 1; padding: 0.45rem 0.6rem; font-size: 0.85rem; }
+
+.run-btn { border-color: var(--live); }
+
+.result-panel {
+  font-size: 0.8rem;
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 0.5rem 0.7rem;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.result-panel:empty { display: none; padding: 0; }
+
+.result-list { margin: 0; }
+.result-list dt { font-weight: 600; color: var(--muted); margin-top: 0.4rem; }
+.result-list dt:first-child { margin-top: 0; }
+.result-list dd { margin: 0 0 0.2rem; word-break: break-word; }
+
+.result-error { color: var(--error); margin: 0; }
+
+dialog#keys-modal {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 1.4rem;
+  max-width: 28rem;
+  width: 90%;
+}
+
+dialog#keys-modal::backdrop { background: rgba(0, 0, 0, 0.5); }
+
+.hint { color: var(--muted); font-size: 0.85rem; }
+
+.key-fields { display: flex; flex-direction: column; gap: 0.6rem; margin: 1rem 0; }
+.key-row { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.9rem; }
+.key-row input {
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+
+footer {
+  padding: 1.5rem 2rem 2.5rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--border);
+}

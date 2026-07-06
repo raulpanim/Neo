@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSINT / Security Research Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <h1>OSINT &amp; Security Research Dashboard</h1>
+  <p class="subtitle">
+    A launcher and live-lookup panel for OSINT, recon, and threat-intel tools.
+    For authorized security research, pentesting, and CTF use only.
+  </p>
+</header>
+
+<section class="search-bar">
+  <input id="target" type="text" placeholder="Enter a domain, IP, hash, email, or keyword&hellip;" autocomplete="off">
+  <select id="input-type">
+    <option value="domain">Domain</option>
+    <option value="ip">IP address</option>
+    <option value="hash">File hash</option>
+    <option value="email">Email</option>
+    <option value="keyword">Keyword</option>
+  </select>
+  <button id="keys-btn" type="button" title="Set API keys for live lookups">API Keys</button>
+</section>
+
+<dialog id="keys-modal">
+  <form method="dialog" id="keys-form">
+    <h2>API keys (stored only in this browser)</h2>
+    <p class="hint">
+      Keys are saved in <code>localStorage</code> and sent only with your own
+      lookup requests. They are never written to any server-side file, log,
+      or database by this app.
+    </p>
+    <div class="key-fields"></div>
+    <div class="modal-actions">
+      <button value="cancel">Cancel</button>
+      <button value="save" id="keys-save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<main id="categories"></main>
+
+<footer>
+  <p>Built for defensive security research. Verify authorization before scanning any target you do not own.</p>
+</footer>
+
+<script id="catalog-data" type="application/json">{{ categories | tojson }}</script>
+<script id="homepages-data" type="application/json">{{ homepages | tojson }}</script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
