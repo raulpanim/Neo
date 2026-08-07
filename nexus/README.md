@@ -142,6 +142,24 @@ Redis-backed (`src/telegram/alerts.js`) so a restart doesn't re-alert
 everything; without Redis it falls back to in-memory, same as job
 progress below.
 
+## Deploying the API + bot to a server
+
+```bash
+# on the server, as root:
+curl -fsSL https://raw.githubusercontent.com/raulpanim/Neo/claude/nexus-bring-up-repair-cbbj70/nexus/deploy-vps.sh | bash
+```
+
+`deploy-vps.sh` installs Docker and Node 20 if missing, clones this repo,
+brings up Neo4j and Redis, seeds the graph (only if it's empty), and
+installs `nexus-api` and `nexus-bot` as systemd services that restart on
+crash or reboot. It refuses to start the bot without `TELEGRAM_BOT_TOKEN`
+set in `.env` - it'll tell you to add it and re-run, which is safe to do
+repeatedly.
+
+Neo4j, Redis, and the API all bind to `127.0.0.1` only (see
+`docker-compose.yml`) - nothing here is reachable from outside the host
+unless you deliberately open a port and set `API_KEY` first.
+
 ## Known limits
 
 - **Authentication is opt-in, not on by default.** Set `API_KEY` before

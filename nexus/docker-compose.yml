@@ -2,9 +2,13 @@ services:
   neo4j:
     image: neo4j:5.15
     container_name: nexus-neo4j
+    # Loopback-only: nothing outside this host needs direct access, and on
+    # a public VPS "7474:7474" would put the Neo4j browser and the bolt
+    # port on the open internet for anyone to brute-force. `localhost`
+    # still resolves here for local dev.
     ports:
-      - "7474:7474"   # browser
-      - "7687:7687"   # bolt
+      - "127.0.0.1:7474:7474"   # browser
+      - "127.0.0.1:7687:7687"   # bolt
     environment:
       NEO4J_AUTH: neo4j/nexus_dev_pass
       NEO4J_server_memory_heap_max__size: 1G
@@ -24,7 +28,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: nexus-redis
-    ports: ["6379:6379"]
+    # Loopback-only - this image has no auth configured, so on a public VPS
+    # "6379:6379" would be an open, unauthenticated Redis on the internet.
+    ports: ["127.0.0.1:6379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
