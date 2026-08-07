@@ -1,0 +1,16 @@
+{
+  "name": "nexus",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Neo4j + Hono OSINT/vulnerability claim graph",
+  "scripts": {
+    "dev": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0",
+    "neo4j-driver": "^5.25.0"
+  }
+}
