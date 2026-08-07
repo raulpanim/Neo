@@ -1,49 +1,39 @@
-// One-time bootstrap: materialize derived edges/properties from every claim
-// present in the database right now. This is the bulk equivalent of calling
-// claims.js `recompute()` / `recomputeProperty()` for every distinct
-// (subject, predicate[, object]) group. Ingestion after this point must go
-// through claims.js so recompute stays incremental and correct — this script
-// is not meant to be re-run against a live, edited graph (it does not clean
-// up derived edges/properties whose claims were retracted after seeding; that
-// case is claims.js's job — see retractClaim/recompute).
+// ==========================================================
+// NEXUS :: backfill — turns edge.sources arrays into :Claim nodes.
+// Run once after upgrading to the claim model. Idempotent.
+// ==========================================================
 
-// ---- Relationship predicates: one block per predicate name, since Cypher
-// relationship types cannot be parameterized. ----
+CREATE CONSTRAINT claim_key IF NOT EXISTS
+  FOR (c:Claim) REQUIRE c.key IS UNIQUE;
+CREATE INDEX claim_predicate IF NOT EXISTS FOR (c:Claim) ON (c.predicate);
+CREATE INDEX claim_observed  IF NOT EXISTS FOR (c:Claim) ON (c.observed_at);
+CREATE INDEX claim_source    IF NOT EXISTS FOR (c:Claim) ON (c.source);
 
-MATCH (cl:Claim {predicate: 'RESOLVES_TO', retracted: false})-[:SUBJECT]->(s), (cl)-[:OBJECT]->(o)
-WITH s, o, collect(cl) AS claims
-MERGE (s)-[r:RESOLVES_TO]->(o)
-SET r.claimCount = size(claims),
-    r.confidence = reduce(m = 0.0, c IN claims | CASE WHEN c.confidence > m THEN c.confidence ELSE m END),
-    r.sources = [c IN claims | c.source],
-    r.updatedAt = datetime();
+// One claim per (edge, source) pair. `sources` is a plain array on the edge,
+// so each entry becomes its own attributable observation.
+MATCH (s)-[r]->(o)
+WHERE r.sources IS NOT NULL AND size(r.sources) > 0
+UNWIND r.sources AS source
+WITH s, o, r, source,
+     type(r) + '|' + elementId(s) + '|' + elementId(o) + '|' + source AS key,
+     coalesce(r.last_seen, date()) AS seen,
+     coalesce(r.first_seen, r.last_seen, date()) AS born
+MERGE (s)-[:SUBJECT_OF]->(c:Claim {key: key})-[:OBJECT_IS]->(o)
+ON CREATE SET c.observations = 1
+SET c.predicate   = type(r),
+    c.source      = source,
+    c.observed_at = datetime({date: seen}),
+    c.first_seen  = datetime({date: born}),
+    c.retracted   = false,
+    c.note        = 'backfilled from edge properties',
+    c.value       = r.method;
 
-MATCH (cl:Claim {predicate: 'HAS_VULNERABILITY', retracted: false})-[:SUBJECT]->(s), (cl)-[:OBJECT]->(o)
-WITH s, o, collect(cl) AS claims
-MERGE (s)-[r:HAS_VULNERABILITY]->(o)
-SET r.claimCount = size(claims),
-    r.confidence = reduce(m = 0.0, c IN claims | CASE WHEN c.confidence > m THEN c.confidence ELSE m END),
-    r.sources = [c IN claims | c.source],
-    r.updatedAt = datetime();
+// Mark the edges as derived so the recompute path is allowed to rewrite them.
+MATCH (s)-[r]->(o)
+WHERE r.sources IS NOT NULL AND size(r.sources) > 0
+SET r.derived = true;
 
-MATCH (cl:Claim {predicate: 'CHAINS_TO', retracted: false})-[:SUBJECT]->(s), (cl)-[:OBJECT]->(o)
-WITH s, o, collect(cl) AS claims
-MERGE (s)-[r:CHAINS_TO]->(o)
-SET r.claimCount = size(claims),
-    r.confidence = reduce(m = 0.0, c IN claims | CASE WHEN c.confidence > m THEN c.confidence ELSE m END),
-    r.sources = [c IN claims | c.source],
-    r.updatedAt = datetime();
-
-// ---- Property predicates: most recent non-retracted claim per (subject,
-// property) wins. Dynamic property key via `s[prop] =` (Cypher 5 dynamic
-// property SET), scoped to the current row with CALL (s, prop, winner). ----
-
-MATCH (cl:Claim {predicate: 'PROPERTY', retracted: false})-[:SUBJECT]->(s)
-WHERE cl.property IS NOT NULL
-WITH s, cl.property AS prop, cl
-ORDER BY cl.assertedAt DESC
-WITH s, prop, collect(cl)[0] AS winner
-CALL (s, prop, winner) {
-  SET s[prop] = winner.value
-}
-RETURN count(*) AS propertiesBackfilled;
+// Sanity check — claim count should equal the sum of all sources arrays.
+MATCH (c:Claim) WITH count(c) AS claims
+MATCH ()-[r]->() WHERE r.sources IS NOT NULL
+RETURN claims AS claims_created, sum(size(r.sources)) AS expected;

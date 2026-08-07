@@ -1,54 +1,45 @@
 #!/usr/bin/env bash
-# Hits the nexus API's endpoints and reports status codes + error bodies.
-# Every check must reach 2xx except nope.invalid, which must 404.
-set -uo pipefail
-
-BASE_URL="${BASE_URL:-http://localhost:3000}"
-FAILURES=0
+# Exercises every endpoint against a running API. Reports, never fixes.
+BASE="${1:-http://localhost:3000}"
+pass=0; fail=0
 
 check() {
-  local path="$1" expect_status="$2"
-  local body_file status
-  body_file="$(mktemp)"
-  status="$(curl -s -o "$body_file" -w '%{http_code}' "${BASE_URL}${path}")"
-
+  local label="$1" path="$2" method="${3:-GET}" body="${4:-}" expect="${5:-2xx}"
+  local code
+  if [ "$method" = "POST" ]; then
+    code=$(curl -s -o /tmp/nexus_out -w '%{http_code}' -X POST "$BASE$path" \
+      -H 'content-type: application/json' -d "${body:-{\}}")
+  else
+    code=$(curl -s -o /tmp/nexus_out -w '%{http_code}' "$BASE$path")
+  fi
   local ok=0
-  if [[ "$expect_status" == "2xx" ]]; then
-    [[ "$status" =~ ^2[0-9][0-9]$ ]] && ok=1
+  if [ "$expect" = "2xx" ]; then
+    [ "$code" -ge 200 ] && [ "$code" -lt 300 ] && ok=1
   else
-    [[ "$status" == "$expect_status" ]] && ok=1
+    [ "$code" = "$expect" ] && ok=1
   fi
-
-  if [[ "$ok" -eq 1 ]]; then
-    printf '[PASS] %-45s -> %s\n' "$path" "$status"
+  if [ "$ok" -eq 1 ]; then
+    printf '\033[0;32mok  \033[0m %-42s %s\n' "$label" "$code"; pass=$((pass+1))
   else
-    printf '[FAIL] %-45s -> %s (expected %s)\n' "$path" "$status" "$expect_status"
-    echo "       body: $(cat "$body_file")"
-    FAILURES=$((FAILURES + 1))
+    printf '\033[0;31mFAIL\033[0m %-42s %s (expected %s)\n' "$label" "$code" "$expect"
+    head -c 300 /tmp/nexus_out; echo; fail=$((fail+1))
   fi
-  rm -f "$body_file"
 }
 
-echo "==> Verifying nexus API at ${BASE_URL}"
-check /health 2xx
-check /api/domains 2xx
-check /api/domains/example.com 2xx
-check /api/hosts 2xx
-check /api/hosts/93.184.216.34 2xx
-check /api/cves 2xx
-check /api/cves/CVE-2021-44228 2xx
-check /api/vulnerabilities/domain/example.com 2xx
-check /api/analysis/chains 2xx
-check /api/intel/conflicts 2xx
-check /api/intel/timeline/cve/CVE-2022-1234 2xx
-check /api/graph 2xx
-check /nope.invalid 404
+echo "Checking $BASE"
+check "health"                  "/api/health"
+check "graph stats"             "/api/graph/stats"
+check "search"                  "/api/graph/search?q=example"
+check "attack surface"          "/api/graph/attack-surface/example.com"
+check "vulnerabilities"         "/api/vulnerabilities/domain/example.com"
+check "exploitable"             "/api/vulnerabilities/exploitable"
+check "inferred chains"         "/api/analysis/chains"
+check "recorded chains"         "/api/analysis/chains/recorded"
+check "reliability matrix"      "/api/intel/sources"
+check "conflicts"               "/api/intel/conflicts"
+check "collector status"        "/api/sources/status"
+check "trending"                "/api/sources/trending"
+check "unknown domain is 404"   "/api/graph/attack-surface/nope.invalid" GET "" 404
 
-echo
-if [[ "$FAILURES" -eq 0 ]]; then
-  echo "All 13 checks passed."
-  exit 0
-else
-  echo "${FAILURES} check(s) failed."
-  exit 1
-fi
+printf '\n%s passed, %s failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

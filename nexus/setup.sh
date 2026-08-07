@@ -1,62 +1,59 @@
 #!/usr/bin/env bash
-# Bring up nexus: start Neo4j in Docker, wait for it, load schema/seed/
-# backfill, install deps, run the test suite. Re-running this script wipes
-# and recreates the Neo4j container so the graph always starts from the
-# same known seed state.
+# One-shot local setup. Safe to re-run.
 set -euo pipefail
 
-CONTAINER_NAME="nexus-neo4j"
-NEO4J_PASSWORD="${NEO4J_PASSWORD:-nexuspassword}"
-BOLT_PORT="${BOLT_PORT:-7687}"
-HTTP_PORT="${HTTP_PORT:-7474}"
+cd "$(dirname "$0")"
+say() { printf '\n\033[0;32m▸ %s\033[0m\n' "$1"; }
+die() { printf '\n\033[0;31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+command -v docker >/dev/null || die "Docker is not installed."
+command -v node   >/dev/null || die "Node.js is not installed."
 
-echo "==> Resetting Neo4j container (${CONTAINER_NAME})"
-docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+node_major=$(node -v | sed 's/v\([0-9]*\).*/\1/')
+[ "$node_major" -ge 20 ] || die "Node 20+ required, found $(node -v)."
 
-echo "==> Starting Neo4j"
-docker run -d --name "$CONTAINER_NAME" \
-  -p "${HTTP_PORT}:7474" -p "${BOLT_PORT}:7687" \
-  -e NEO4J_AUTH="neo4j/${NEO4J_PASSWORD}" \
-  neo4j:5-community >/dev/null
+[ -f .env ] || { cp .env.example .env; say "Created .env from the example."; }
 
-echo "==> Waiting for Neo4j to answer on bolt://localhost:${BOLT_PORT}"
-attempts=60
-until docker exec "$CONTAINER_NAME" cypher-shell -u neo4j -p "$NEO4J_PASSWORD" "RETURN 1;" >/dev/null 2>&1; do
-  attempts=$((attempts - 1))
-  if [ "$attempts" -le 0 ]; then
-    echo "Neo4j did not become ready in time" >&2
-    docker logs "$CONTAINER_NAME" --tail 100 >&2
-    exit 1
+say "Starting Neo4j"
+docker compose up -d neo4j
+
+say "Waiting for Neo4j to accept connections"
+for i in $(seq 1 60); do
+  if docker exec nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass 'RETURN 1' >/dev/null 2>&1; then
+    printf 'ready after %ss\n' "$i"; break
   fi
-  sleep 2
+  [ "$i" -eq 60 ] && die "Neo4j did not come up. Check: docker compose logs neo4j"
+  sleep 1
 done
-echo "==> Neo4j is up"
 
-run_cypher_file() {
-  local file="$1"
-  echo "==> Loading ${file}"
-  if ! docker exec -i "$CONTAINER_NAME" cypher-shell -u neo4j -p "$NEO4J_PASSWORD" < "$file"; then
-    echo "Failed loading ${file} - see cypher-shell output above" >&2
-    exit 1
-  fi
-}
+say "Installing API dependencies"
+npm install --silent
 
-run_cypher_file db/schema.cypher
-run_cypher_file db/seed.cypher
-run_cypher_file db/backfill-claims.cypher
+say "Loading schema and sample data"
+docker exec -i nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass < db/schema.cypher
+docker exec -i nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass < db/seed.cypher
 
-echo "==> Installing dependencies"
-npm install
+say "Converting edges into claims"
+docker exec -i nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass < db/backfill-claims.cypher
 
-echo "==> Running tests"
-export NEO4J_URI="bolt://localhost:${BOLT_PORT}"
-export NEO4J_PASSWORD
+say "Installing UI dependencies"
+npm install --silent --prefix frontend
+
+say "Running the test suite"
 npm test
 
-echo
-echo "==> setup.sh completed successfully"
-echo "Start the API with: npm run dev"
-echo "Then verify with:   ./verify.sh"
+cat <<'DONE'
+
+Setup finished. Two terminals:
+
+  npm run dev                    API   -> http://localhost:3000
+  npm run dev --prefix frontend  UI    -> http://localhost:5173
+
+Neo4j browser: http://localhost:7474  (neo4j / nexus_dev_pass)
+
+Then check the API answers:
+
+  curl localhost:3000/api/health
+  curl localhost:3000/api/analysis/chains
+
+DONE

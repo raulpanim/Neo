@@ -1,1 +1,90 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-void text-green font-mono antialiased;
+    /* faint horizontal raster — the tube is on, just idle */
+    background-image: repeating-linear-gradient(
+      to bottom,
+      rgba(74, 222, 128, 0.022) 0px,
+      rgba(74, 222, 128, 0.022) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
+
+  ::selection {
+    @apply bg-green text-void;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-1 ring-green ring-offset-1 ring-offset-void;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-void;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-rule;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-green-dim;
+  }
+}
+
+@layer components {
+  /* section eyebrow — encodes the panel's role, not decoration */
+  .eyebrow {
+    @apply text-micro uppercase text-green-dim;
+  }
+
+  .rule-t {
+    @apply border-t border-rule;
+  }
+
+  .kbd {
+    @apply rounded-sm border border-rule bg-raised px-1 text-micro text-green-dim;
+  }
+
+  .btn {
+    @apply border border-rule bg-panel px-2 py-1 text-tiny uppercase text-green-dim
+           transition-colors hover:border-green-dim hover:text-green
+           disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-rule
+           disabled:hover:text-green-dim;
+  }
+
+  .btn-on {
+    @apply border-green-dim text-green shadow-glow;
+  }
+
+  /* the canvas vignette + slow sweep, together the one atmospheric flourish */
+  .crt::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

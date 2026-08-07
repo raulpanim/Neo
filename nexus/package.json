@@ -1,16 +1,22 @@
 {
-  "name": "nexus",
+  "name": "nexus-api",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "description": "Neo4j + Hono OSINT/vulnerability claim graph",
   "scripts": {
-    "dev": "node src/server.js",
-    "test": "node --test test/*.test.js"
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "db:init": "docker exec -i nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass < db/schema.cypher && docker exec -i nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass < db/seed.cypher",
+    "test": "node test/matching.test.mjs && node test/reliability.test.mjs && node test/feeds.test.mjs && node test/chains.test.mjs && node test/shodan.test.mjs",
+    "sync:nvd": "curl -s -X POST localhost:3000/api/sources/nvd/sync -H 'content-type: application/json' -d '{\"limit\":25}'",
+    "sync:kev": "curl -s -X POST localhost:3000/api/sources/kev/sync",
+    "db:backfill": "docker exec -i nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass < db/backfill-claims.cypher",
+    "sync:feeds": "curl -s -X POST localhost:3000/api/sources/feeds/sync",
+    "sync:shodan": "curl -s -X POST localhost:3000/api/sources/shodan/sync -H 'content-type: application/json' -d '{\"limit\":10}'"
   },
   "dependencies": {
+    "hono": "^4.0.0",
     "@hono/node-server": "^1.13.0",
-    "hono": "^4.6.0",
-    "neo4j-driver": "^5.25.0"
+    "neo4j-driver": "^5.15.0",
+    "axios": "^1.7.0"
   }
 }
