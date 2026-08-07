@@ -1,7 +1,9 @@
 import {
   parseCommand, capMessage, formatHelp, formatHealth,
   formatVulns, formatChains, formatConflicts, formatExploitable, formatSearch,
+  formatConflictAlert, formatExploitableAlert,
 } from '../src/telegram/format.js';
+import { diffNew, conflictKey, exploitableKey } from '../src/telegram/alerts.js';
 
 let fails = 0;
 const eq = (label, got, want) => {
@@ -109,6 +111,36 @@ const searchMsg = formatSearch('example', {
   elements: { nodes: [{ data: { type: 'Domain', label: 'example.com' } }] },
 });
 ok('search message includes the match', searchMsg.includes('example.com'));
+
+// --- alert formatting ---
+ok('conflict alert names the kind and subject', formatConflictAlert(conflictsData.conflicts[0]).includes('stale') && formatConflictAlert(conflictsData.conflicts[0]).includes('example.com'));
+ok('exploitable alert names the cve', formatExploitableAlert({ cve: 'CVE-2021-44228', cvss: 10, software: 'Log4j', domains: [] }).includes('CVE-2021-44228'));
+
+// --- alert keys ---
+eq('conflict key is stable across identical conflicts', conflictKey({ kind: 'stale', subject_id: 'a', predicate: 'RESOLVES_TO', object_id: null }),
+   conflictKey({ kind: 'stale', subject_id: 'a', predicate: 'RESOLVES_TO', object_id: null }));
+ok('conflict key differs by kind', conflictKey({ kind: 'stale', subject_id: 'a', predicate: 'RESOLVES_TO' }) !== conflictKey({ kind: 'weak_support', subject_id: 'a', predicate: 'RESOLVES_TO' }));
+eq('exploitable key is just the cve', exploitableKey({ cve: 'CVE-2021-44228' }), 'exploitable|CVE-2021-44228');
+
+// --- diffNew: the actual alerting logic ---
+const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+const keyOf = (i) => i.id;
+
+const firstRun = diffNew([], items, keyOf);
+eq('everything is new against an empty seen set', firstRun.fresh.length, 3);
+eq('seen set grows to cover every item', firstRun.seen.length, 3);
+
+const secondRun = diffNew(firstRun.seen, items, keyOf);
+eq('nothing is new once everything has been seen', secondRun.fresh, []);
+eq('seen set is unchanged when nothing is new', secondRun.seen, firstRun.seen);
+
+const withOneNew = diffNew(firstRun.seen, [...items, { id: 'd' }], keyOf);
+eq('only the genuinely new item is reported', withOneNew.fresh, [{ id: 'd' }]);
+eq('seen set grows by exactly the new item', withOneNew.seen.length, 4);
+
+const afterRetraction = diffNew(firstRun.seen, [{ id: 'a' }], keyOf);
+eq('an item missing from the current list is not reported as new', afterRetraction.fresh, []);
+ok('seen set is not shrunk just because an item is temporarily absent', afterRetraction.seen.includes('b') && afterRetraction.seen.includes('c'));
 
 console.log(fails ? `\n${fails} failing` : '\nall passing');
 process.exit(fails ? 1 : 0);

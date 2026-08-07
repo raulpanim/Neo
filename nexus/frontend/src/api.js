@@ -3,6 +3,7 @@ import axios from 'axios';
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 15_000,
+  headers: import.meta.env.VITE_API_KEY ? { 'X-API-Key': import.meta.env.VITE_API_KEY } : {},
 });
 
 /** Turns any failure into a short line the status bar can print verbatim. */

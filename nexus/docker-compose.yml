@@ -17,11 +17,19 @@ services:
       timeout: 5s
       retries: 10
 
+  # Persists live sync-job progress (src/redis.js) so it survives an API
+  # restart. Not gated behind the "full" profile like postgres below - the
+  # app still works without it (falls back to in-memory), but it's cheap
+  # enough to just run by default.
   redis:
     image: redis:7-alpine
     container_name: nexus-redis
     ports: ["6379:6379"]
-    profiles: ["full"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   postgres:
     image: postgres:16-alpine

@@ -19,11 +19,9 @@ let nvdRunning = null;
 
 // POST /api/sources/nvd/sync  { limit }
 app.post('/nvd/sync', async (c) => {
-  if (nvdRunning && getJob(nvdRunning)?.status === 'running') {
-    return c.json(
-      { error: 'An NVD sync is already running.', job: plain(getJob(nvdRunning)) },
-      409,
-    );
+  const running = nvdRunning ? await getJob(nvdRunning) : null;
+  if (running?.status === 'running') {
+    return c.json({ error: 'An NVD sync is already running.', job: plain(running) }, 409);
   }
 
   const body = await c.req.json().catch(() => ({}));
@@ -84,9 +82,9 @@ app.get('/trending', async (c) => {
 });
 
 // GET /api/sources/jobs/:id
-app.get('/jobs/:id', (c) => {
-  const job = getJob(c.req.param('id'));
-  if (!job) return c.json({ error: 'No job with that id. Jobs are lost on restart.' }, 404);
+app.get('/jobs/:id', async (c) => {
+  const job = await getJob(c.req.param('id'));
+  if (!job) return c.json({ error: 'No job with that id.' }, 404);
   return c.json(job);
 });
 
@@ -108,7 +106,7 @@ app.get('/status', async (c) => {
       api_key: false,
       outlets: Object.entries(FEEDS).map(([name, f]) => ({ name, label: f.label, url: f.url })),
     },
-    active_jobs: listJobs().filter((j) => j.status === 'running'),
+    active_jobs: (await listJobs()).filter((j) => j.status === 'running'),
     history: runs.map((r) => Object.fromEntries(r.keys.map((k) => [k, plain(r.get(k))]))),
   });
 });

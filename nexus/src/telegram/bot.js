@@ -1,5 +1,6 @@
 import { createTelegramClient } from './client.js';
 import { createNexusClient } from './nexusClient.js';
+import { startAlertPoller } from './alerts.js';
 import {
   parseCommand,
   formatHelp,
@@ -114,6 +115,13 @@ if (isMain) {
     console.error('TELEGRAM_BOT_TOKEN is not set. Get one from @BotFather and add it to .env.');
     process.exit(1);
   }
+
+  startAlertPoller({
+    telegram: createTelegramClient(process.env.TELEGRAM_BOT_TOKEN),
+    nexus: createNexusClient(process.env.NEXUS_API_URL),
+    chatId: process.env.TELEGRAM_ALERT_CHAT_ID || null,
+  });
+
   runBot().catch((err) => {
     console.error('[telegram] fatal:', err.message);
     process.exit(1);

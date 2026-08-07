@@ -5,6 +5,7 @@ import CommandRail from './components/CommandRail.jsx';
 import Inspector from './components/Inspector.jsx';
 import FindingsPanel from './components/FindingsPanel.jsx';
 import StatusBar from './components/StatusBar.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { layoutOrder } from './cytoscape/style.js';
 
 const EMPTY = { nodes: [], edges: [] };
@@ -22,6 +23,7 @@ export default function App() {
   const [stats, setStats] = useState(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [activeJobs, setActiveJobs] = useState(0);
   const cyRef = useRef(null);
 
   const say = (text) => setMessage(text);
@@ -38,6 +40,24 @@ export default function App() {
       run({ kind: 'surface', arg: 'example.com' });
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- active-job indicator ------------------------------------------
+  // Polls independently of whether the collectors tab is open, so a long
+  // NVD/Shodan sync stays visible instead of only showing up if you happen
+  // to have that specific drawer tab open.
+  useEffect(() => {
+    let live = true;
+    const poll = () =>
+      api.sourceStatus().then((res) => {
+        if (live && res.ok) setActiveJobs(res.data.active_jobs?.length ?? 0);
+      });
+    poll();
+    const t = setInterval(poll, 5000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
   }, []);
 
   const load = (payload, note, nextLayout) => {
@@ -157,6 +177,7 @@ export default function App() {
         onLayout={setLayout}
         message={message}
         busy={busy}
+        activeJobs={activeJobs}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -171,27 +192,31 @@ export default function App() {
 
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
-            <GraphCanvas
-              elements={elements}
-              layout={layout}
-              hiddenTypes={hiddenTypes}
-              onSelect={setSelected}
-              onCyReady={(cy) => (cyRef.current = cy)}
-            />
+            <ErrorBoundary resetKeys={[elements]} label="The graph couldn't be rendered.">
+              <GraphCanvas
+                elements={elements}
+                layout={layout}
+                hiddenTypes={hiddenTypes}
+                onSelect={setSelected}
+                onCyReady={(cy) => (cyRef.current = cy)}
+              />
+            </ErrorBoundary>
           </div>
 
-          <FindingsPanel
-            findings={findings.items}
-            summary={findings.summary}
-            title={findings.title}
-            open={drawerOpen}
-            onToggle={() => setDrawerOpen((v) => !v)}
-            onFocus={focusCve}
-            onFocusNode={focusNode}
-            onMessage={say}
-            tab={drawerTab}
-            onTab={setDrawerTab}
-          />
+          <ErrorBoundary resetKeys={[drawerTab, findings]} label="This panel couldn't be rendered.">
+            <FindingsPanel
+              findings={findings.items}
+              summary={findings.summary}
+              title={findings.title}
+              open={drawerOpen}
+              onToggle={() => setDrawerOpen((v) => !v)}
+              onFocus={focusCve}
+              onFocusNode={focusNode}
+              onMessage={say}
+              tab={drawerTab}
+              onTab={setDrawerTab}
+            />
+          </ErrorBoundary>
         </main>
 
         <Inspector

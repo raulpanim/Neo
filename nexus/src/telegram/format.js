@@ -106,6 +106,21 @@ export function formatExploitable(data) {
   return capMessage([`${count} exploitable finding${count === 1 ? '' : 's'}:`, '', ...lines].join('\n') + footer);
 }
 
+export function formatConflictAlert(c) {
+  return [
+    `🚨 New conflict: *${c.kind}*`,
+    `${c.subject} ${c.predicate}${c.object ? ` → ${c.object}` : ''}`,
+    c.detail,
+  ].join('\n');
+}
+
+export function formatExploitableAlert(item) {
+  return [
+    `🚨 New exploitable CVE: *${item.cve}* (${item.cvss ?? '?'})`,
+    `${item.software ?? '?'} · ${(item.domains ?? []).filter(Boolean).join(', ') || 'no domain on record'}`,
+  ].join('\n');
+}
+
 export function formatSearch(query, data) {
   const nodes = data.elements?.nodes ?? [];
   if (!data.count) return `No matches for "${query}".`;

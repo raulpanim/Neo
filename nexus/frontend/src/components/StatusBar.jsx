@@ -1,6 +1,6 @@
 import { layoutOrder } from '../cytoscape/style.js';
 
-export default function StatusBar({ health, stats, counts, layout, onLayout, message, busy }) {
+export default function StatusBar({ health, stats, counts, layout, onLayout, message, busy, activeJobs }) {
   const online = health === 'ok';
 
   return (
@@ -21,6 +21,15 @@ export default function StatusBar({ health, stats, counts, layout, onLayout, mes
       {stats?.exploitable_cves > 0 && (
         <p className="text-tiny text-alert">
           {stats.exploitable_cves} cve{stats.exploitable_cves === 1 ? '' : 's'} with public exploits
+        </p>
+      )}
+
+      {/* visible regardless of which drawer tab is open, so a long NVD/Shodan
+          sync doesn't disappear just because you're not looking at collectors */}
+      {activeJobs > 0 && (
+        <p className="flex items-center gap-1.5 text-tiny text-warn">
+          <span aria-hidden className="h-1.5 w-1.5 animate-blink rounded-full bg-warn" />
+          {activeJobs} job{activeJobs === 1 ? '' : 's'} running
         </p>
       )}
 

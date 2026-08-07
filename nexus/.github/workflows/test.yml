@@ -1,0 +1,35 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      # README states Node 20+ - test that floor plus current LTS, so a
+      # regression that only shows up on the minimum supported version
+      # doesn't slip through.
+      matrix:
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install API dependencies
+        run: npm ci
+
+      - name: Run the pure-logic test suite
+        run: npm test
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Build the frontend
+        run: npm run build
+        working-directory: frontend

@@ -15,9 +15,10 @@
     "sync:shodan": "curl -s -X POST localhost:3000/api/sources/shodan/sync -H 'content-type: application/json' -d '{\"limit\":10}'"
   },
   "dependencies": {
-    "hono": "^4.0.0",
     "@hono/node-server": "^1.13.0",
+    "axios": "^1.7.0",
+    "hono": "^4.0.0",
     "neo4j-driver": "^5.15.0",
-    "axios": "^1.7.0"
+    "redis": "^6.2.0"
   }
 }

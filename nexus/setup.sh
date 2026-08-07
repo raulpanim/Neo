@@ -14,8 +14,8 @@ node_major=$(node -v | sed 's/v\([0-9]*\).*/\1/')
 
 [ -f .env ] || { cp .env.example .env; say "Created .env from the example."; }
 
-say "Starting Neo4j"
-docker compose up -d neo4j
+say "Starting Neo4j and Redis"
+docker compose up -d neo4j redis
 
 say "Waiting for Neo4j to accept connections"
 for i in $(seq 1 60); do
@@ -23,6 +23,15 @@ for i in $(seq 1 60); do
     printf 'ready after %ss\n' "$i"; break
   fi
   [ "$i" -eq 60 ] && die "Neo4j did not come up. Check: docker compose logs neo4j"
+  sleep 1
+done
+
+say "Waiting for Redis to accept connections"
+for i in $(seq 1 30); do
+  if docker exec nexus-redis redis-cli ping >/dev/null 2>&1; then
+    printf 'ready after %ss\n' "$i"; break
+  fi
+  [ "$i" -eq 30 ] && die "Redis did not come up. Check: docker compose logs redis"
   sleep 1
 done
 

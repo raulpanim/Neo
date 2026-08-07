@@ -132,12 +132,21 @@ capped to Telegram's 4096-char limit) and unit-tested without a token;
 `client.js`/`nexusClient.js`/`bot.js` are the two HTTP clients and the
 polling loop that wire it to Telegram and to the API.
 
+**Push alerts.** Set `TELEGRAM_ALERT_CHAT_ID` and the bot also polls
+`/api/intel/conflicts` and `/api/vulnerabilities/exploitable` every
+`TELEGRAM_ALERT_INTERVAL_MINUTES` (default 15), pushing anything genuinely
+*new* since the last poll — not the whole standing list every time. The
+first poll after startup establishes a silent baseline rather than
+dumping everything currently in the graph. "Already alerted" state is
+Redis-backed (`src/telegram/alerts.js`) so a restart doesn't re-alert
+everything; without Redis it falls back to in-memory, same as job
+progress below.
+
 ## Known limits
 
-- **No authentication.** Every endpoint is open, including the ones that spend
-  your Shodan and NVD quota. Do not expose this beyond localhost yet.
-- **Job state is in memory** and lost on restart. Redis is in `docker-compose.yml`
-  under the `full` profile, unused so far.
+- **Authentication is opt-in, not on by default.** Set `API_KEY` before
+  exposing this beyond localhost - unset, every endpoint (including the
+  ones that spend your Shodan and NVD quota) is open, same as before.
 - **Attack chains approximate reachability by shared IP.** Containers behind one
   address are isolated, and privilege escalation inside a container is not root
   on the host. Read chains as leads, not confirmed paths.

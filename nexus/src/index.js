@@ -13,7 +13,7 @@ const app = new Hono();
 const ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
 app.use('*', async (c, next) => {
   c.header('Access-Control-Allow-Origin', ORIGIN);
-  c.header('Access-Control-Allow-Headers', 'Content-Type');
+  c.header('Access-Control-Allow-Headers', 'Content-Type, X-API-Key');
   c.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   if (c.req.method === 'OPTIONS') return c.body(null, 204);
   await next();
@@ -24,6 +24,19 @@ app.use('*', async (c, next) => {
   const t0 = Date.now();
   await next();
   console.log(`${c.req.method} ${c.req.path} -> ${c.res.status} ${Date.now() - t0}ms`);
+});
+
+// --- auth (opt-in) ---------------------------------------------------
+// Unset API_KEY preserves the original "no keys needed to start" behavior.
+// /api/health stays open even when a key is set, so uptime checks and the
+// Docker healthcheck don't need one.
+const API_KEY = process.env.API_KEY || null;
+app.use('/api/*', async (c, next) => {
+  if (!API_KEY || c.req.path === '/api/health') return next();
+  if (c.req.header('X-API-Key') !== API_KEY) {
+    return c.json({ error: 'Missing or invalid X-API-Key.' }, 401);
+  }
+  return next();
 });
 
 // --- routes ---------------------------------------------------------

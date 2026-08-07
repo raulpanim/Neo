@@ -6,7 +6,12 @@ import axios from 'axios';
  * shouldn't need a try/catch around every command handler to stay alive.
  */
 export function createNexusClient(baseURL = process.env.NEXUS_API_URL || 'http://localhost:3000') {
-  const http = axios.create({ baseURL, timeout: 15_000 });
+  const apiKey = process.env.NEXUS_API_KEY || null;
+  const http = axios.create({
+    baseURL,
+    timeout: 15_000,
+    headers: apiKey ? { 'X-API-Key': apiKey } : {},
+  });
 
   async function get(path, params) {
     try {

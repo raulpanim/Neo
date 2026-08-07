@@ -2,6 +2,7 @@ import { read, write } from '../db.js';
 import { cvesForCpe } from '../sources/nvd.js';
 import { fetchKev } from '../sources/kev.js';
 import { toCpeName, matchSoftware } from '../sources/cpe.js';
+import { redisGet, redisSet, redisKeys } from '../redis.js';
 
 // --- Cypher -------------------------------------------------------------
 
@@ -87,11 +88,36 @@ ORDER BY r.finished_at DESC
 LIMIT 20
 `;
 
-// --- job state (in-memory; Redis can take over in week 5) ----------------
+// --- job state --------------------------------------------------------
+// Redis persists live progress across restarts when it's reachable; an
+// in-memory Map is the fallback (and the only copy anyone gets if Redis is
+// down for this run). Completed-run history survives either way, via the
+// :SyncRun nodes RECORD_RUN writes to Neo4j.
 
-const jobs = new Map();
-export const getJob = (id) => jobs.get(id) ?? null;
-export const listJobs = () => [...jobs.values()].slice(-10);
+const JOB_TTL_SECONDS = 3600;
+const jobKey = (id) => `nexus:job:${id}`;
+const localJobs = new Map();
+
+/** Call after every meaningful mutation so a poller sees live progress. */
+async function saveJob(job) {
+  localJobs.set(job.id, job);
+  await redisSet(jobKey(job.id), job, JOB_TTL_SECONDS);
+}
+
+export async function getJob(id) {
+  return (await redisGet(jobKey(id))) ?? localJobs.get(id) ?? null;
+}
+
+export async function listJobs() {
+  const keys = await redisKeys('nexus:job:*');
+  if (keys.length) {
+    const remote = (await Promise.all(keys.map(redisGet))).filter(Boolean);
+    if (remote.length) {
+      return remote.sort((a, b) => new Date(a.started) - new Date(b.started)).slice(-10);
+    }
+  }
+  return [...localJobs.values()].slice(-10);
+}
 
 function newJob(source) {
   const id = `${source}-${Date.now().toString(36)}`;
@@ -108,7 +134,7 @@ function newJob(source) {
     current: null,
     errors: [],
   };
-  jobs.set(id, job);
+  localJobs.set(id, job);
   return job;
 }
 
@@ -122,6 +148,7 @@ function newJob(source) {
  */
 export async function syncNvd({ limit = 50, maxCvesPerSoftware = 200 } = {}) {
   const job = newJob('nvd');
+  await saveJob(job);
 
   (async () => {
     try {
@@ -129,6 +156,7 @@ export async function syncNvd({ limit = 50, maxCvesPerSoftware = 200 } = {}) {
         Object.fromEntries(r.keys.map((k) => [k, r.get(k)])),
       );
       job.total = softwareRows.length;
+      await saveJob(job);
 
       for (const sw of softwareRows) {
         job.current = `${sw.name} ${sw.version}`;
@@ -177,6 +205,7 @@ export async function syncNvd({ limit = 50, maxCvesPerSoftware = 200 } = {}) {
           job.errors.push(`${sw.name}: ${err.message}`);
         }
         job.processed += 1;
+        await saveJob(job);
       }
 
       job.status = job.errors.length ? 'completed_with_errors' : 'completed';
@@ -186,6 +215,7 @@ export async function syncNvd({ limit = 50, maxCvesPerSoftware = 200 } = {}) {
     } finally {
       job.current = null;
       job.finished = new Date().toISOString();
+      await saveJob(job);
       await write(RECORD_RUN, {
         source: 'nvd',
         started: job.started,
