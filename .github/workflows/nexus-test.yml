@@ -1,8 +1,22 @@
-name: test
+name: nexus test
 
+# GitHub Actions only ever reads workflows from .github/workflows/ at the
+# repo root - this repo has other content alongside nexus/, so both the
+# working directories below and this path filter matter: no point running
+# a Node test suite when the change is entirely outside nexus/.
 on:
   push:
+    paths:
+      - 'nexus/**'
+      - '.github/workflows/nexus-test.yml'
   pull_request:
+    paths:
+      - 'nexus/**'
+      - '.github/workflows/nexus-test.yml'
+
+defaults:
+  run:
+    working-directory: nexus
 
 jobs:
   test:
@@ -28,8 +42,8 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
-        working-directory: frontend
+        working-directory: nexus/frontend
 
       - name: Build the frontend
         run: npm run build
-        working-directory: frontend
+        working-directory: nexus/frontend
