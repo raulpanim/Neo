@@ -14,7 +14,8 @@ example.com ──RESOLVES_TO──> 1.2.3.4 ──HAS_PORT──> :8009
 
 - Docker and Docker Compose
 - Node.js 20 or newer
-- No API keys needed to start. Optional: `NVD_API_KEY`, `SHODAN_API_KEY`.
+- No API keys needed to start. Optional: `NVD_API_KEY`, `SHODAN_API_KEY`,
+  `TELEGRAM_BOT_TOKEN`.
 
 ## Setup
 
@@ -40,7 +41,7 @@ Then open http://localhost:5173. The graph loads `example.com` automatically.
 ## Verify it works
 
 ```bash
-npm test                                        # 98 assertions, no services needed
+npm test                                        # 132 assertions, no services needed
 curl localhost:3000/api/health
 curl localhost:3000/api/graph/attack-surface/example.com | head -c 400
 curl localhost:3000/api/vulnerabilities/domain/example.com
@@ -62,6 +63,7 @@ src/
                         reliability matrix
   ingest/               claim model, sync jobs, conflict detection
   analysis/             CVSS capability inference, attack chains
+  telegram/             chat interface onto the same API - see below
 frontend/src/
   App.jsx               state, commands, keyboard
   components/           canvas, rail, inspector, drawer panels
@@ -102,10 +104,36 @@ Without `NVD_API_KEY` the NVD sync makes one request every 6.5 seconds. Without
 `SHODAN_API_KEY` host scanning uses InternetDB, which returns ports and CPEs but
 no versions and no port attribution.
 
+## Telegram bot
+
+A read-only chat interface onto the same API — no new dependency, the
+Telegram Bot API is plain REST and `axios` already covers it.
+
+```bash
+# message @BotFather on Telegram, /newbot, copy the token it gives you
+echo "TELEGRAM_BOT_TOKEN=123456:your-token-here" >> .env
+npm run bot            # long-polls Telegram; needs `npm run dev` running too
+```
+
+| Command | Does |
+| --- | --- |
+| `/vulns <domain>` | ranked findings for a domain, same ordering as the UI |
+| `/chains` | inferred exploit chains |
+| `/conflicts` | live intel disagreements |
+| `/exploitable` | everything with a known exploit, graph-wide |
+| `/search <query>` | full-text graph search |
+| `/health` | API + Neo4j status |
+
+It long-polls (`getUpdates`) rather than registering a webhook, so it needs
+no public HTTPS endpoint — run it anywhere that can reach
+`api.telegram.org` and `NEXUS_API_URL` (defaults to `localhost:3000`).
+`src/telegram/format.js` is pure (command parsing + Markdown formatting,
+capped to Telegram's 4096-char limit) and unit-tested without a token;
+`client.js`/`nexusClient.js`/`bot.js` are the two HTTP clients and the
+polling loop that wire it to Telegram and to the API.
+
 ## Known limits
 
-- **Not yet run against a live database.** Unit tests cover the pure logic;
-  the Cypher has been reviewed but not executed.
 - **No authentication.** Every endpoint is open, including the ones that spend
   your Shodan and NVD quota. Do not expose this beyond localhost yet.
 - **Job state is in memory** and lost on restart. Redis is in `docker-compose.yml`
