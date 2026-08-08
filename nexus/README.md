@@ -49,6 +49,21 @@ curl localhost:3000/api/analysis/chains                 # should find Log4Shell 
 curl localhost:3000/api/intel/conflicts
 ```
 
+With Neo4j, Redis, and `npm run dev` all running, the frontend has its own
+end-to-end suite against the real API (`frontend/e2e/`, Playwright):
+
+```bash
+cd frontend && npm run test:e2e
+```
+
+Covers the graph actually rendering (not just the API returning 200),
+search/surface/exploitable commands, the chains tab and its per-step
+rationale (a regression test for a real bug this session found - a chain's
+displayed reasoning silently drifting to a different transition), the
+conflicts/sources/collectors panels, and - by mocking a malformed API
+response rather than adding test-only hooks to the app - that a bad payload
+degrades to the error boundary's fallback instead of a blank white screen.
+
 ## Layout
 
 ```

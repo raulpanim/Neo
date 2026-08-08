@@ -47,3 +47,71 @@ jobs:
       - name: Build the frontend
         run: npm run build
         working-directory: nexus/frontend
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Start Neo4j and Redis
+        run: docker compose up -d neo4j redis
+
+      - name: Wait for Neo4j
+        run: |
+          for i in $(seq 1 60); do
+            docker exec nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass 'RETURN 1' >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "Neo4j did not come up" >&2 && exit 1
+
+      - name: Wait for Redis
+        run: |
+          for i in $(seq 1 30); do
+            docker exec nexus-redis redis-cli ping >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          echo "Redis did not come up" >&2 && exit 1
+
+      - name: Install API dependencies
+        run: npm ci
+
+      - name: Load schema and seed data
+        run: |
+          docker exec -i nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass < db/schema.cypher
+          docker exec -i nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass < db/seed.cypher
+          docker exec -i nexus-neo4j cypher-shell -u neo4j -p nexus_dev_pass < db/backfill-claims.cypher
+
+      - name: Start the API
+        run: nohup node src/index.js > api.log 2>&1 &
+
+      - name: Wait for the API
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000/api/health >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          cat api.log >&2 && exit 1
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: nexus/frontend
+
+      - name: Install Playwright's browser
+        run: npx playwright install --with-deps chromium
+        working-directory: nexus/frontend
+
+      - name: Run the E2E suite
+        run: npm run test:e2e
+        working-directory: nexus/frontend
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: nexus/frontend/playwright-report/
+          retention-days: 14
