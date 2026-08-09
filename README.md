@@ -24,6 +24,10 @@ querying these services.
 - Everything else (Censys, IntelX, HTB, TryHackMe, sandboxes, etc.) is a
   deep-link launcher only, since those either require login-gated
   dashboards or have no public query API.
+- **Infrastructure graph** — enter one domain and it maps that domain's own
+  subdomains (crt.sh), related hosts/IPs (urlscan.io), and IP org/ASN info
+  (IPinfo) as a force-directed graph. Scoped to a single queried domain; it
+  does not crawl or index unrelated internet hosts.
 
 ## Live (no key needed)
 
