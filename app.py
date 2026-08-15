@@ -299,6 +299,85 @@ def lookup_securitytrails(target, input_type, api_key):
     return ok(items, data)
 
 
+def build_infra_graph(target):
+    """
+    Map a single authorized domain's own subdomains and related hosts/IPs
+    using crt.sh (certificate transparency), urlscan.io (recent scans), and
+    IPinfo (ASN/org enrichment). Scoped to one queried domain — this does not
+    crawl or index unrelated internet hosts.
+    """
+    if not DOMAIN_RE.match(target):
+        return fail("Enter a valid domain.")
+
+    nodes = {}
+    edges = []
+    seen_edges = set()
+
+    def add_node(node_id, label, node_type):
+        if node_id not in nodes:
+            nodes[node_id] = {"id": node_id, "label": label, "type": node_type}
+        return nodes[node_id]
+
+    def add_edge(a, b):
+        if a == b:
+            return
+        pair = (a, b)
+        if pair not in seen_edges:
+            seen_edges.add(pair)
+            edges.append({"source": a, "target": b})
+
+    add_node(target, target, "domain")
+
+    try:
+        r = http_get("https://crt.sh/", params={"q": target, "output": "json"})
+        if r.status_code == 200:
+            names = set()
+            for row in r.json():
+                for name in row.get("name_value", "").split("\n"):
+                    name = name.strip().lower().lstrip("*.")
+                    if name and name.endswith(f".{target}") and name != target:
+                        names.add(name)
+            for name in sorted(names)[:40]:
+                add_node(name, name, "subdomain")
+                add_edge(target, name)
+    except requests.RequestException:
+        pass
+
+    try:
+        r = http_get(
+            "https://urlscan.io/api/v1/search/",
+            params={"q": f"page.domain:{target}", "size": 15},
+        )
+        if r.status_code == 200:
+            for res in r.json().get("results", []):
+                page = res.get("page", {})
+                host = page.get("domain")
+                ip = page.get("ip")
+                if host:
+                    add_node(host, host, "domain" if host == target else "subdomain")
+                    add_edge(target, host)
+                if ip:
+                    add_node(ip, ip, "ip")
+                    add_edge(host or target, ip)
+    except requests.RequestException:
+        pass
+
+    for node in [n for n in nodes.values() if n["type"] == "ip"][:15]:
+        try:
+            r = http_get(f"https://ipinfo.io/{node['id']}/json")
+            if r.status_code == 200:
+                org = r.json().get("org")
+                if org:
+                    node["label"] = f"{node['id']} ({org})"
+        except requests.RequestException:
+            pass
+
+    if len(nodes) <= 1:
+        return fail("No related infrastructure found for this domain.")
+
+    return {"ok": True, "error": None, "nodes": list(nodes.values()), "edges": edges}
+
+
 LIVE_LOOKUPS = {
     "crtsh": lookup_crtsh,
     "urlscan": lookup_urlscan,
@@ -339,6 +418,24 @@ def api_lookup(service):
         result = fail(f"Network error contacting {service}: {exc}")
     except Exception as exc:  # noqa: BLE001 - surface any unexpected upstream shape as a lookup error
         result = fail(f"Unexpected error from {service}: {exc}")
+
+    return jsonify(result)
+
+
+@app.route("/api/graph", methods=["POST"])
+def api_graph():
+    body = request.get_json(silent=True) or {}
+    target = (body.get("target") or "").strip().lower()
+
+    if not validate_target("domain", target):
+        return jsonify(fail(f"'{target}' is not a valid domain.")), 400
+
+    try:
+        result = build_infra_graph(target)
+    except requests.RequestException as exc:
+        result = fail(f"Network error building graph: {exc}")
+    except Exception as exc:  # noqa: BLE001 - surface any unexpected upstream shape as a lookup error
+        result = fail(f"Unexpected error building graph: {exc}")
 
     return jsonify(result)
 
