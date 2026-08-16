@@ -319,6 +319,11 @@ def index():
     return render_template("index.html", categories=CATEGORIES, homepages=homepages())
 
 
+@app.route("/game")
+def game():
+    return render_template("game.html")
+
+
 @app.route("/api/lookup/<service>", methods=["POST"])
 def api_lookup(service):
     fn = LIVE_LOOKUPS.get(service)

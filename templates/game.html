@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Gem Swap RPG</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/game.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <h1>💎 Gem Swap RPG</h1>
+  <p class="subtitle">
+    Swipe (or drag) a gem onto a neighbor to swap it. Match 3 or more of the
+    same gem to attack &mdash; hearts heal you. Survive the counterattacks
+    and level up!
+  </p>
+  <a class="back-link" href="{{ url_for('index') }}">&larr; Back to dashboard</a>
+</header>
+
+<main class="game-wrap">
+  <section class="hud">
+    <div class="fighter player">
+      <div class="fighter-row">
+        <span class="fighter-name">You &mdash; Lv <span id="level">1</span></span>
+        <span class="fighter-hp-text"><span id="player-hp">100</span>/<span id="player-max-hp">100</span></span>
+      </div>
+      <div class="bar"><div id="player-bar" class="bar-fill player-fill"></div></div>
+    </div>
+    <div class="fighter enemy">
+      <div class="fighter-row">
+        <span class="fighter-name" id="enemy-name">Slime</span>
+        <span class="fighter-hp-text"><span id="enemy-hp">50</span>/<span id="enemy-max-hp">50</span></span>
+      </div>
+      <div class="bar"><div id="enemy-bar" class="bar-fill enemy-fill"></div></div>
+    </div>
+  </section>
+
+  <div class="board-area">
+    <div id="board" class="board"></div>
+    <div id="floaters" class="floaters"></div>
+  </div>
+
+  <p id="message" class="message">Match gems to attack the enemy!</p>
+
+  <div class="controls">
+    <button id="restart-btn" type="button">Restart</button>
+  </div>
+</main>
+
+<div id="overlay" class="overlay hidden">
+  <div class="overlay-card">
+    <h2 id="overlay-title">Victory!</h2>
+    <p id="overlay-text"></p>
+    <button id="overlay-btn" type="button">Continue</button>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/game.js') }}"></script>
+</body>
+</html>

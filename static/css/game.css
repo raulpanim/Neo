@@ -1,0 +1,217 @@
+:root {
+  color-scheme: light dark;
+  --bg: #0f1216;
+  --panel: #171b21;
+  --panel-2: #1e232b;
+  --border: #2a303a;
+  --text: #e6e9ee;
+  --muted: #93a0b3;
+  --accent: #5eb0ff;
+  --danger: #ff6b6b;
+  --success: #38c977;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f7fa;
+    --panel: #ffffff;
+    --panel-2: #eef1f5;
+    --border: #dde2e8;
+    --text: #1a1f27;
+    --muted: #5b6672;
+    --accent: #1668d6;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.topbar {
+  padding: 2rem 2rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar h1 { margin: 0 0 0.4rem; font-size: 1.6rem; }
+.subtitle { margin: 0 0 0.6rem; color: var(--muted); max-width: 40rem; font-size: 0.95rem; }
+.back-link { color: var(--accent); font-size: 0.85rem; text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+
+.game-wrap {
+  max-width: 30rem;
+  margin: 0 auto;
+  padding: 1.2rem 1rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.hud {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+}
+
+.fighter-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.fighter-name { font-weight: 600; }
+.fighter-hp-text { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.bar {
+  height: 0.7rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  width: 100%;
+  transition: width 0.35s ease;
+}
+
+.player-fill { background: linear-gradient(90deg, #38c977, #5eb0ff); }
+.enemy-fill { background: linear-gradient(90deg, #ff6b6b, #f0a340); }
+
+.board-area {
+  position: relative;
+  align-self: center;
+  width: 100%;
+}
+
+.board {
+  --cols: 7;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 1fr);
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  touch-action: none;
+  user-select: none;
+}
+
+.cell {
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-size: min(6.5vw, 1.7rem);
+  background: var(--panel-2);
+  cursor: grab;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.cell.selected {
+  outline: 2px solid var(--accent);
+  transform: scale(0.92);
+}
+
+.cell.matched {
+  opacity: 0;
+  transform: scale(0.4);
+}
+
+.cell.dropping {
+  animation: drop-in 0.25s ease;
+}
+
+@keyframes drop-in {
+  from { transform: translateY(-100%); opacity: 0.4; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.cell.shake {
+  animation: shake 0.3s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.floaters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.floater {
+  position: absolute;
+  font-weight: 700;
+  font-size: 1.1rem;
+  animation: float-up 0.9s ease forwards;
+}
+
+.floater.dmg { color: var(--danger); }
+.floater.heal { color: var(--success); }
+
+@keyframes float-up {
+  from { transform: translateY(0); opacity: 1; }
+  to { transform: translateY(-2.2rem); opacity: 0; }
+}
+
+.message {
+  text-align: center;
+  min-height: 1.4rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.controls { display: flex; justify-content: center; }
+
+.controls button, .overlay-card button {
+  padding: 0.55rem 1.1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.controls button:hover, .overlay-card button:hover { border-color: var(--accent); }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.overlay.hidden { display: none; }
+
+.overlay-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.6rem;
+  max-width: 22rem;
+  width: 90%;
+  text-align: center;
+}
+
+.overlay-card h2 { margin: 0 0 0.6rem; }
+.overlay-card p { color: var(--muted); margin: 0 0 1.2rem; }
