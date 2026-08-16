@@ -88,6 +88,72 @@ body {
 .player-fill { background: linear-gradient(90deg, #38c977, #5eb0ff); }
 .enemy-fill { background: linear-gradient(90deg, #ff6b6b, #f0a340); }
 
+.hidden { display: none !important; }
+
+.overworld {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.map {
+  --map-cols: 9;
+  display: grid;
+  grid-template-columns: repeat(var(--map-cols), 1fr);
+  gap: 2px;
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.tile {
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: min(5.5vw, 1.4rem);
+  background: #3a5f3a;
+}
+
+@media (prefers-color-scheme: light) {
+  .tile { background: #b7dfb0; }
+}
+
+.tile.tree { background: #274a27; }
+.tile.water { background: #2c5f8a; }
+.tile.has-enemy { box-shadow: inset 0 0 0 2px var(--danger); }
+.tile.has-player { background: #6b8f4e; }
+
+.dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.dpad-mid { display: flex; gap: 4px; }
+
+.dpad-btn {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 1.1rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.dpad-btn:hover { border-color: var(--accent); }
+.dpad-btn:active { background: var(--accent); }
+
+.battle { display: flex; flex-direction: column; gap: 0.9rem; }
+
 .board-area {
   position: relative;
   align-self: center;
@@ -200,8 +266,6 @@ body {
   justify-content: center;
   z-index: 10;
 }
-
-.overlay.hidden { display: none; }
 
 .overlay-card {
   background: var(--panel);

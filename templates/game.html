@@ -10,9 +10,9 @@
 <header class="topbar">
   <h1>💎 Gem Swap RPG</h1>
   <p class="subtitle">
-    Swipe (or drag) a gem onto a neighbor to swap it. Match 3 or more of the
-    same gem to attack &mdash; hearts heal you. Survive the counterattacks
-    and level up!
+    Walk with the arrow keys, WASD, or the pad below. Bump into an enemy to
+    battle &mdash; swipe or drag gems to match 3+ and attack, hearts heal
+    you. Level up and explore further!
   </p>
   <a class="back-link" href="{{ url_for('index') }}">&larr; Back to dashboard</a>
 </header>
@@ -26,7 +26,7 @@
       </div>
       <div class="bar"><div id="player-bar" class="bar-fill player-fill"></div></div>
     </div>
-    <div class="fighter enemy">
+    <div id="enemy-row" class="fighter enemy hidden">
       <div class="fighter-row">
         <span class="fighter-name" id="enemy-name">Slime</span>
         <span class="fighter-hp-text"><span id="enemy-hp">50</span>/<span id="enemy-max-hp">50</span></span>
@@ -35,12 +35,26 @@
     </div>
   </section>
 
-  <div class="board-area">
-    <div id="board" class="board"></div>
-    <div id="floaters" class="floaters"></div>
+  <div id="overworld" class="overworld">
+    <div id="map" class="map"></div>
+    <div class="dpad" aria-label="Movement controls">
+      <button class="dpad-btn dpad-up" type="button" data-dir="up" aria-label="Walk up">&#9650;</button>
+      <div class="dpad-mid">
+        <button class="dpad-btn dpad-left" type="button" data-dir="left" aria-label="Walk left">&#9664;</button>
+        <button class="dpad-btn dpad-right" type="button" data-dir="right" aria-label="Walk right">&#9654;</button>
+      </div>
+      <button class="dpad-btn dpad-down" type="button" data-dir="down" aria-label="Walk down">&#9660;</button>
+    </div>
   </div>
 
-  <p id="message" class="message">Match gems to attack the enemy!</p>
+  <div id="battle" class="battle hidden">
+    <div class="board-area">
+      <div id="board" class="board"></div>
+      <div id="floaters" class="floaters"></div>
+    </div>
+  </div>
+
+  <p id="message" class="message">Walk into an enemy to battle!</p>
 
   <div class="controls">
     <button id="restart-btn" type="button">Restart</button>
