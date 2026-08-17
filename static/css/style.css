@@ -202,6 +202,11 @@ dialog#keys-modal::backdrop { background: rgba(0, 0, 0, 0.5); }
   gap: 0.7rem;
 }
 
+/* Author CSS setting `display` on this element overrides the UA's
+   default `[hidden] { display: none }` rule, so it must be restated
+   explicitly here or the panel stays visible despite the attribute. */
+.ai-panel[hidden] { display: none; }
+
 .ai-header { display: flex; align-items: center; justify-content: space-between; }
 .ai-header h2 { margin: 0; font-size: 1.1rem; }
 

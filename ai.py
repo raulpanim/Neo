@@ -49,6 +49,11 @@ def _chunk_markdown(text, max_chars=900):
         section = section.strip()
         if not section:
             continue
+        body = "\n".join(
+            line for line in section.splitlines() if not line.lstrip().startswith("#")
+        ).strip()
+        if not body:
+            continue  # heading-only section (e.g. a lone H1 title), no retrievable content
         if len(section) <= max_chars:
             chunks.append(section)
             continue
@@ -97,15 +102,20 @@ def _ensure_index():
     global _index
     if _index is not None:
         return _index
+    chunks = _load_chunks()
+    if not chunks:
+        _index = []  # no knowledge files at all; nothing will change that at runtime
+        return _index
     index = []
-    for text, source in _load_chunks():
+    for text, source in chunks:
         try:
             vector = _embed(text)
         except requests.RequestException:
             continue
         index.append({"text": text, "source": source, "vector": vector})
-    _index = index
-    return _index
+    if index:
+        _index = index  # cache only once embedding actually succeeded for something
+    return index
 
 
 def retrieve(query, k=4, min_score=0.2):
