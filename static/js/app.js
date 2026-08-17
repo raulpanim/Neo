@@ -279,5 +279,197 @@
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Relationship graph (domain -> IP -> port -> software -> CVE)
+  // ---------------------------------------------------------------------
+  const NODE_COLORS = {
+    domain: "#5eb0ff",
+    ip: "#38c977",
+    port: "#2dd4bf",
+    software: "#c084fc",
+    cve: "#ff6b6b",
+  };
+  const NODE_RADIUS = { domain: 14, ip: 12, port: 8, software: 10, cve: 10 };
+
+  const graphModal = document.getElementById("graph-modal");
+  const graphSvg = document.getElementById("graph-svg");
+  const graphStatus = document.getElementById("graph-status");
+  const graphDomainInput = document.getElementById("graph-domain");
+
+  document.getElementById("graph-btn").addEventListener("click", () => {
+    const t = targetInput.value.trim();
+    if (t && typeSelect.value === "domain") graphDomainInput.value = t;
+    graphModal.showModal();
+  });
+  document.getElementById("graph-close").addEventListener("click", () => graphModal.close());
+
+  // Simple Fruchterman-Reingold force-directed layout, run once up front
+  // (no external graphing library — this has to keep working with no
+  // internet access once the page itself is loaded).
+  function layoutGraph(nodes, edges, width, height) {
+    const k = Math.sqrt((width * height) / Math.max(nodes.length, 1)) * 0.9;
+    // Distance floor and a hard force cap: without both, two nodes that
+    // land very close during the simulation drive k*k/dist toward
+    // Infinity, and Infinity/Infinity evaluates to NaN in JS — which then
+    // spreads to every other node through the pairwise interactions.
+    const minDist = 1;
+    const maxForce = k * k * 4;
+    const pos = new Map();
+    nodes.forEach((n, i) => {
+      const angle = (2 * Math.PI * i) / nodes.length;
+      pos.set(n.id, {
+        x: width / 2 + Math.cos(angle) * (width / 3),
+        y: height / 2 + Math.sin(angle) * (height / 3),
+      });
+    });
+
+    const iterations = 300;
+    for (let iter = 0; iter < iterations; iter++) {
+      const disp = new Map(nodes.map((n) => [n.id, { x: 0, y: 0 }]));
+
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = pos.get(nodes[i].id);
+          const b = pos.get(nodes[j].id);
+          let dx = a.x - b.x, dy = a.y - b.y;
+          const dist = Math.max(Math.sqrt(dx * dx + dy * dy), minDist);
+          const force = Math.min((k * k) / dist, maxForce);
+          dx = (dx / dist) * force;
+          dy = (dy / dist) * force;
+          disp.get(nodes[i].id).x += dx;
+          disp.get(nodes[i].id).y += dy;
+          disp.get(nodes[j].id).x -= dx;
+          disp.get(nodes[j].id).y -= dy;
+        }
+      }
+
+      // Accumulate into disp like repulsion does, instead of mutating pos
+      // directly here — a node with several edges (common: a shared
+      // software or CVE node) would otherwise have each edge's update
+      // compound on the position the previous edge in this same pass just
+      // wrote, unclamped, which runs away to Infinity within a handful of
+      // edges and then poisons every other node through the next
+      // iteration's repulsion pass (Infinity/Infinity = NaN in JS).
+      for (const e of edges) {
+        const a = pos.get(e.source);
+        const b = pos.get(e.target);
+        if (!a || !b) continue;
+        let dx = a.x - b.x, dy = a.y - b.y;
+        const dist = Math.max(Math.sqrt(dx * dx + dy * dy), minDist);
+        const force = Math.min((dist * dist) / k, maxForce);
+        dx = (dx / dist) * force;
+        dy = (dy / dist) * force;
+        disp.get(e.source).x -= dx;
+        disp.get(e.source).y -= dy;
+        disp.get(e.target).x += dx;
+        disp.get(e.target).y += dy;
+      }
+
+      const temp = Math.max(width, height) * (1 - iter / iterations) * 0.05;
+      for (const n of nodes) {
+        const d = disp.get(n.id);
+        const dist = Math.max(Math.sqrt(d.x * d.x + d.y * d.y), minDist);
+        const p = pos.get(n.id);
+        p.x += (d.x / dist) * Math.min(dist, temp);
+        p.y += (d.y / dist) * Math.min(dist, temp);
+        p.x += (width / 2 - p.x) * 0.002;
+        p.y += (height / 2 - p.y) * 0.002;
+        p.x = Math.max(24, Math.min(width - 24, p.x));
+        p.y = Math.max(24, Math.min(height - 24, p.y));
+      }
+    }
+    return pos;
+  }
+
+  function renderGraph(nodes, edges) {
+    const wrap = document.getElementById("graph-canvas-wrap");
+    const width = Math.max(wrap.clientWidth, 600);
+    const height = Math.max(wrap.clientHeight, 500);
+    graphSvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+    graphSvg.innerHTML = "";
+
+    if (!nodes.length) return;
+    const pos = layoutGraph(nodes, edges, width, height);
+
+    const edgeGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    for (const e of edges) {
+      const a = pos.get(e.source);
+      const b = pos.get(e.target);
+      if (!a || !b) continue;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", a.x);
+      line.setAttribute("y1", a.y);
+      line.setAttribute("x2", b.x);
+      line.setAttribute("y2", b.y);
+      line.setAttribute("class", "graph-edge");
+      edgeGroup.appendChild(line);
+    }
+    graphSvg.appendChild(edgeGroup);
+
+    const nodeGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    for (const n of nodes) {
+      const p = pos.get(n.id);
+      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      g.setAttribute("class", "graph-node");
+      g.setAttribute("transform", `translate(${p.x},${p.y})`);
+
+      const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      circle.setAttribute("r", NODE_RADIUS[n.type] || 9);
+      circle.setAttribute("fill", NODE_COLORS[n.type] || "#93a0b3");
+      g.appendChild(circle);
+
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("y", (NODE_RADIUS[n.type] || 9) + 13);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("class", "graph-label");
+      label.textContent = n.label;
+      g.appendChild(label);
+
+      if (n.type === "cve") {
+        g.style.cursor = "pointer";
+        g.addEventListener("click", () => {
+          askAI(`What is ${n.label.split(" ")[0]} and how serious is it?`);
+        });
+      }
+
+      nodeGroup.appendChild(g);
+    }
+    graphSvg.appendChild(nodeGroup);
+  }
+
+  async function buildGraph() {
+    const domain = graphDomainInput.value.trim();
+    if (!domain) {
+      graphStatus.textContent = "Enter a domain first.";
+      return;
+    }
+    const keys = loadKeys();
+    graphStatus.textContent = "Building…";
+    graphSvg.innerHTML = "";
+    try {
+      const resp = await fetch("/api/graph", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain, shodan_key: keys.shodan || "" }),
+      });
+      const data = await resp.json();
+      if (!data.ok) {
+        graphStatus.textContent = data.error || "Failed to build graph.";
+        return;
+      }
+      renderGraph(data.nodes, data.edges);
+      const parts = [`${data.nodes.length} nodes`, `${data.edges.length} edges`];
+      if (data.note) parts.push(data.note);
+      graphStatus.textContent = parts.join(" — ");
+    } catch (err) {
+      graphStatus.textContent = `Request failed: ${err}`;
+    }
+  }
+
+  document.getElementById("graph-build").addEventListener("click", buildGraph);
+  graphDomainInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") buildGraph();
+  });
+
   render();
 })();

@@ -13,6 +13,7 @@ import ipaddress
 import os
 import re
 import secrets
+import socket
 
 import requests
 from flask import Flask, Response, jsonify, render_template, request
@@ -357,6 +358,146 @@ LIVE_LOOKUPS = {
     "hibp": lookup_hibp,
     "securitytrails": lookup_securitytrails,
 }
+
+
+# ---------------------------------------------------------------------------
+# Relationship graph: domain -> IP -> port -> software -> CVE. Built from the
+# same live sources as the lookup cards above (DNS, Shodan, NVD), just
+# correlated into a graph instead of shown as separate flat result lists.
+# ---------------------------------------------------------------------------
+
+GRAPH_MAX_IPS = 5
+GRAPH_MAX_PORTS_PER_IP = 20
+GRAPH_MAX_CVES_PER_SOFTWARE = 3
+
+
+def _resolve_domain(domain):
+    try:
+        _, _, ips = socket.gethostbyname_ex(domain)
+        return sorted(set(ips))
+    except socket.gaierror:
+        return []
+
+
+def _fetch_shodan_host(ip, api_key):
+    r = http_get(f"https://api.shodan.io/shodan/host/{ip}", params={"key": api_key})
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+
+def _nvd_top_cves(keyword, limit=GRAPH_MAX_CVES_PER_SOFTWARE):
+    r = http_get(
+        "https://services.nvd.nist.gov/rest/json/cves/2.0",
+        params={"keywordSearch": keyword, "resultsPerPage": 20},
+    )
+    if r.status_code != 200:
+        return []
+    vulns = r.json().get("vulnerabilities", [])
+    vulns.sort(key=lambda v: _cve_best_score(v.get("cve", {})), reverse=True)
+    return vulns[:limit]
+
+
+def build_graph(domain, shodan_key):
+    nodes = {}
+    edges = []
+
+    def add_node(node_id, node_type, label):
+        if node_id not in nodes:
+            nodes[node_id] = {"id": node_id, "type": node_type, "label": label}
+
+    seen_edges = set()
+
+    def add_edge(source, target, rel):
+        key = (source, target, rel)
+        if key not in seen_edges:
+            seen_edges.add(key)
+            edges.append({"source": source, "target": target, "rel": rel})
+
+    domain_id = f"domain:{domain}"
+    add_node(domain_id, "domain", domain)
+
+    ips = _resolve_domain(domain)
+    if not ips:
+        return {"nodes": list(nodes.values()), "edges": edges, "note": "Domain did not resolve to an IP."}
+
+    note = None if shodan_key else "Add a Shodan API key to expand ports, software, and CVEs."
+    # Tracked across all IPs, not reset per-IP: the same software commonly
+    # shows up on more than one IP for the same domain, and re-querying
+    # NVD for CVEs we already fetched would waste calls against its public
+    # rate limit for no new information.
+    seen_software = set()
+
+    for ip in ips[:GRAPH_MAX_IPS]:
+        ip_id = f"ip:{ip}"
+        add_node(ip_id, "ip", ip)
+        add_edge(domain_id, ip_id, "RESOLVES_TO")
+
+        if not shodan_key:
+            continue
+        try:
+            host = _fetch_shodan_host(ip, shodan_key)
+        except requests.RequestException:
+            host = None
+        if not host:
+            continue
+
+        for svc in host.get("data", [])[:GRAPH_MAX_PORTS_PER_IP]:
+            port = svc.get("port")
+            if port is None:
+                continue
+            port_id = f"port:{ip}:{port}"
+            add_node(port_id, "port", f"{ip}:{port}")
+            add_edge(ip_id, port_id, "HAS_PORT")
+
+            product = svc.get("product")
+            if not product:
+                continue
+            software_label = f"{product} {svc.get('version', '')}".strip()
+            software_id = f"software:{software_label}"
+            add_node(software_id, "software", software_label)
+            add_edge(port_id, software_id, "RUNS_SOFTWARE")
+
+            if software_label in seen_software:
+                continue
+            seen_software.add(software_label)
+            try:
+                # NVD keywordSearch does literal text matching against CVE
+                # descriptions, which almost never contain an exact
+                # "product version" phrase (they describe version ranges
+                # in prose) — searching on the product name alone is what
+                # actually returns matches.
+                cves = _nvd_top_cves(product)
+            except requests.RequestException:
+                cves = []
+            for cve in cves:
+                cve_data = cve.get("cve", {})
+                cve_id_str = cve_data.get("id")
+                if not cve_id_str:
+                    continue
+                score = _cve_best_score(cve_data)
+                cve_node_id = f"cve:{cve_id_str}"
+                add_node(cve_node_id, "cve", f"{cve_id_str} ({score if score >= 0 else '?'})")
+                add_edge(software_id, cve_node_id, "VULNERABLE_TO")
+
+    return {"nodes": list(nodes.values()), "edges": edges, "note": note}
+
+
+@app.route("/api/graph", methods=["POST"])
+def api_graph():
+    body = request.get_json(silent=True) or {}
+    domain = (body.get("domain") or "").strip()
+    shodan_key = (body.get("shodan_key") or "").strip() or None
+
+    if not validate_target("domain", domain):
+        return jsonify({"ok": False, "error": f"'{domain}' is not a valid domain.", "nodes": [], "edges": []}), 400
+
+    try:
+        graph = build_graph(domain, shodan_key)
+    except requests.RequestException as exc:
+        return jsonify({"ok": False, "error": f"Network error building graph: {exc}", "nodes": [], "edges": []})
+
+    return jsonify({"ok": True, "error": None, **graph})
 
 
 @app.route("/")

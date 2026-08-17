@@ -25,6 +25,7 @@
     <option value="keyword">Keyword</option>
   </select>
   <button id="keys-btn" type="button" title="Set API keys for live lookups">API Keys</button>
+  <button id="graph-btn" type="button" title="Domain relationship graph">Graph</button>
   <button id="ai-btn" type="button" title="Offline AI assistant">AI Assistant</button>
 </section>
 
@@ -42,6 +43,35 @@
       <button value="save" id="keys-save">Save</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="graph-modal">
+  <div class="graph-header">
+    <h2>Relationship graph</h2>
+    <div class="graph-controls">
+      <span class="graph-legend">
+        <span class="legend-dot" data-type="domain"></span>domain
+        <span class="legend-dot" data-type="ip"></span>ip
+        <span class="legend-dot" data-type="port"></span>port
+        <span class="legend-dot" data-type="software"></span>software
+        <span class="legend-dot" data-type="cve"></span>cve
+      </span>
+      <button id="graph-close" type="button" aria-label="Close">&times;</button>
+    </div>
+  </div>
+  <p class="hint">
+    Maps how a domain resolves to hosts, open ports, detected software, and
+    matching CVEs. Ports/software/CVEs need a Shodan key (set it under API
+    Keys) — without one you'll just see domain &rarr; IP.
+  </p>
+  <div class="graph-toolbar">
+    <input id="graph-domain" type="text" placeholder="domain.com" autocomplete="off">
+    <button id="graph-build" type="button">Build graph</button>
+    <span id="graph-status" class="hint"></span>
+  </div>
+  <div id="graph-canvas-wrap">
+    <svg id="graph-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+  </div>
 </dialog>
 
 <main id="categories"></main>
