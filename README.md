@@ -45,6 +45,29 @@ python app.py
 
 Then open http://127.0.0.1:5000.
 
+## Exposing it beyond localhost (e.g. a Pi + travel router)
+
+By default Neo binds to `127.0.0.1` only and the interactive debugger is
+off — safe defaults for local use. To reach it from other devices on a
+travel router's Wi-Fi, set a password first:
+
+```bash
+export NEO_AUTH_PASSWORD="something-long-and-random"
+export HOST=0.0.0.0
+python app.py
+```
+
+Any username plus that password (HTTP Basic Auth) is required for every
+request once `NEO_AUTH_PASSWORD` is set. Without it, binding to `0.0.0.0`
+leaves the dashboard — including your API keys flow and every live
+lookup — open to anyone on that network with no login. The app prints a
+warning at startup if it detects that combination.
+
+Other environment variables: `PORT` (default `5000`), `FLASK_DEBUG=1` to
+enable Werkzeug's interactive debugger for local development only —
+never combine it with a non-loopback `HOST`, since the debugger allows
+arbitrary code execution to anyone who can reach it.
+
 ## Offline AI assistant (optional)
 
 Neo can include a chat panel and per-result "Explain with AI" button

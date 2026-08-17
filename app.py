@@ -9,12 +9,13 @@ never persisted, logged, or stored on the server.
 
 For authorized security research / pentesting / CTF use only.
 """
-import base64
 import ipaddress
+import os
 import re
+import secrets
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 import ai
 from services import CATEGORIES, homepages
@@ -23,6 +24,20 @@ app = Flask(__name__)
 
 REQUEST_TIMEOUT = 15
 USER_AGENT = "osint-dashboard/1.0 (+security-research)"
+
+AUTH_PASSWORD = os.environ.get("NEO_AUTH_PASSWORD")
+
+
+@app.before_request
+def require_auth():
+    if not AUTH_PASSWORD:
+        return None
+    auth = request.authorization
+    if auth is None or not secrets.compare_digest(auth.password or "", AUTH_PASSWORD):
+        return Response(
+            "Authentication required.", 401, {"WWW-Authenticate": 'Basic realm="Neo"'}
+        )
+    return None
 
 DOMAIN_RE = re.compile(
     r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63}(?<!-))+$"
@@ -380,4 +395,22 @@ def api_ai_explain():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="127.0.0.1", port=5000)
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "5000"))
+    debug = os.environ.get("FLASK_DEBUG") == "1"
+
+    if host not in ("127.0.0.1", "localhost") and not AUTH_PASSWORD:
+        print(
+            f"WARNING: binding to {host} with no NEO_AUTH_PASSWORD set — "
+            "this dashboard (and its API keys/lookups) will be reachable "
+            "by anyone on this network, with no login.",
+        )
+    if debug and host not in ("127.0.0.1", "localhost"):
+        print(
+            "WARNING: FLASK_DEBUG=1 with a non-loopback host exposes the "
+            "Werkzeug interactive debugger on the network — this allows "
+            "arbitrary code execution to anyone who can reach it. Do not "
+            "combine FLASK_DEBUG=1 with HOST=0.0.0.0 outside local dev.",
+        )
+
+    app.run(debug=debug, host=host, port=port)
