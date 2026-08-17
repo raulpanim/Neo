@@ -16,6 +16,7 @@ import re
 import requests
 from flask import Flask, jsonify, render_template, request
 
+import ai
 from services import CATEGORIES, homepages
 
 app = Flask(__name__)
@@ -341,6 +342,41 @@ def api_lookup(service):
         result = fail(f"Unexpected error from {service}: {exc}")
 
     return jsonify(result)
+
+
+AI_MESSAGE_MAX_LEN = 4000
+
+
+@app.route("/api/ai/chat", methods=["POST"])
+def api_ai_chat():
+    body = request.get_json(silent=True) or {}
+    message = (body.get("message") or "").strip()
+    if not message or len(message) > AI_MESSAGE_MAX_LEN:
+        return jsonify(
+            {"ok": False, "error": f"Message is required (max {AI_MESSAGE_MAX_LEN} chars).", "reply": None, "sources": []}
+        ), 400
+    return jsonify(ai.chat(message))
+
+
+@app.route("/api/ai/explain", methods=["POST"])
+def api_ai_explain():
+    body = request.get_json(silent=True) or {}
+    service = (body.get("service") or "").strip()[:100]
+    result_data = body.get("result")
+    if not isinstance(result_data, dict) or not result_data.get("items"):
+        return jsonify({"ok": False, "error": "No result data to explain.", "reply": None, "sources": []}), 400
+
+    items = result_data.get("items")
+    if not isinstance(items, list):
+        return jsonify({"ok": False, "error": "No result data to explain.", "reply": None, "sources": []}), 400
+
+    lines = []
+    for item in items[:25]:
+        if isinstance(item, dict):
+            lines.append(f"- {item.get('label')}: {item.get('value')}")
+    context = f"Service: {service or 'unknown'}\n" + "\n".join(lines)
+    message = f"Explain what these {service or 'lookup'} results mean for a security researcher, in plain language."
+    return jsonify(ai.chat(message, extra_context=context))
 
 
 if __name__ == "__main__":

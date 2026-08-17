@@ -25,6 +25,7 @@
     <option value="keyword">Keyword</option>
   </select>
   <button id="keys-btn" type="button" title="Set API keys for live lookups">API Keys</button>
+  <button id="ai-btn" type="button" title="Offline AI assistant">AI Assistant</button>
 </section>
 
 <dialog id="keys-modal">
@@ -44,6 +45,22 @@
 </dialog>
 
 <main id="categories"></main>
+
+<aside id="ai-panel" class="ai-panel" hidden>
+  <div class="ai-header">
+    <h2>Offline AI assistant</h2>
+    <button id="ai-close" type="button" aria-label="Close">&times;</button>
+  </div>
+  <p class="hint">
+    Runs entirely on this machine via a local Ollama model. Uses local
+    reference notes when relevant &mdash; no data leaves this device.
+  </p>
+  <div id="ai-messages" class="ai-messages"></div>
+  <form id="ai-form" class="ai-form">
+    <textarea id="ai-input" rows="2" placeholder="Ask about a target, a tool, or a result&hellip;"></textarea>
+    <button type="submit">Send</button>
+  </form>
+</aside>
 
 <footer>
   <p>Built for defensive security research. Verify authorization before scanning any target you do not own.</p>

@@ -78,7 +78,74 @@
     return service.inputs.length === 0 || service.inputs.includes(inputType);
   }
 
-  function renderResult(panel, result) {
+  // ---------------------------------------------------------------------
+  // Offline AI assistant
+  // ---------------------------------------------------------------------
+  const aiPanel = document.getElementById("ai-panel");
+  const aiMessages = document.getElementById("ai-messages");
+  const aiForm = document.getElementById("ai-form");
+  const aiInput = document.getElementById("ai-input");
+
+  function openAIPanel() {
+    aiPanel.hidden = false;
+  }
+
+  document.getElementById("ai-btn").addEventListener("click", () => {
+    aiPanel.hidden = !aiPanel.hidden;
+  });
+  document.getElementById("ai-close").addEventListener("click", () => {
+    aiPanel.hidden = true;
+  });
+
+  function appendAIBubble(role, text) {
+    const bubble = document.createElement("div");
+    bubble.className = `ai-bubble ai-${role}`;
+    bubble.textContent = text;
+    aiMessages.appendChild(bubble);
+    aiMessages.scrollTop = aiMessages.scrollHeight;
+    return bubble;
+  }
+
+  async function askAI(message, { endpoint = "/api/ai/chat", extraBody = {} } = {}) {
+    openAIPanel();
+    appendAIBubble("user", message);
+    const pending = appendAIBubble("assistant ai-pending", "Thinking…");
+    try {
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, ...extraBody }),
+      });
+      const data = await resp.json();
+      pending.classList.remove("ai-pending");
+      if (!data.ok) {
+        pending.classList.add("ai-error");
+        pending.textContent = data.error || "The AI assistant failed to respond.";
+        return;
+      }
+      pending.textContent = data.reply;
+      if (data.sources && data.sources.length) {
+        const src = document.createElement("div");
+        src.className = "ai-sources";
+        src.textContent = `Sources: ${data.sources.join(", ")}`;
+        pending.appendChild(src);
+      }
+    } catch (err) {
+      pending.classList.remove("ai-pending");
+      pending.classList.add("ai-error");
+      pending.textContent = `Request failed: ${err}`;
+    }
+  }
+
+  aiForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const message = aiInput.value.trim();
+    if (!message) return;
+    aiInput.value = "";
+    askAI(message);
+  });
+
+  function renderResult(panel, result, service) {
     panel.classList.remove("loading");
     panel.innerHTML = "";
     if (!result.ok) {
@@ -99,6 +166,20 @@
       list.appendChild(dd);
     }
     panel.appendChild(list);
+
+    if (service) {
+      const explainBtn = document.createElement("button");
+      explainBtn.type = "button";
+      explainBtn.className = "explain-btn";
+      explainBtn.textContent = "Explain with AI";
+      explainBtn.addEventListener("click", () => {
+        askAI(`Explain these ${service.name} results.`, {
+          endpoint: "/api/ai/explain",
+          extraBody: { service: service.name, result },
+        });
+      });
+      panel.appendChild(explainBtn);
+    }
   }
 
   function makeCard(category, service) {
@@ -170,9 +251,9 @@
             }),
           });
           const result = await resp.json();
-          renderResult(panel, result);
+          renderResult(panel, result, service);
         } catch (err) {
-          renderResult(panel, { ok: false, error: `Request failed: ${err}` });
+          renderResult(panel, { ok: false, error: `Request failed: ${err}` }, service);
         }
       });
     }
