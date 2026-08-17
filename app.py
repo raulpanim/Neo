@@ -96,14 +96,27 @@ def http_get(url, **kwargs):
 def lookup_crtsh(target, input_type, api_key):
     if input_type != "domain":
         return fail("crt.sh only supports domain lookups.")
-    r = http_get("https://crt.sh/", params={"q": target, "output": "json"})
+    # Large domains (e.g. google.com has 1000+ certificate rows) can take
+    # crt.sh well over the default timeout to respond.
+    r = http_get(
+        "https://crt.sh/", params={"q": target, "output": "json"}, timeout=45
+    )
     if r.status_code != 200:
         return fail(f"crt.sh returned HTTP {r.status_code}")
     try:
         data = r.json()
     except ValueError:
         return fail("crt.sh returned no certificates for this domain.")
-    names = sorted({row.get("name_value", "") for row in data})[:25]
+    # Each row's name_value can hold multiple SANs newline-separated within
+    # one certificate; split before deduping or a single multi-SAN cert
+    # swallows the "top 25" list as one giant blob instead of distinct names.
+    names = set()
+    for row in data:
+        for name in row.get("name_value", "").split("\n"):
+            name = name.strip()
+            if name:
+                names.add(name)
+    names = sorted(names)[:25]
     items = [{"label": "Certificate name", "value": n} for n in names]
     return ok(items or [{"label": "Result", "value": "No certificates found."}], data[:25])
 
