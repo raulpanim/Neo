@@ -238,6 +238,14 @@ CATEGORIES = [
                 "key_name": None,
             },
             {
+                "name": "Shodan InternetDB",
+                "desc": "Free, no-key ports/CVEs/hostnames lookup",
+                "inputs": ["ip"],
+                "link": "https://internetdb.shodan.io/{target}",
+                "live": "internetdb",
+                "key_name": None,
+            },
+            {
                 "name": "IPVoid",
                 "desc": "IP blacklist & reputation checker",
                 "inputs": ["ip"],

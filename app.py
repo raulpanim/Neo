@@ -214,6 +214,26 @@ def lookup_ipinfo(target, input_type, api_key):
     return ok(items, data)
 
 
+def lookup_internetdb(target, input_type, api_key):
+    if input_type != "ip":
+        return fail("Shodan InternetDB only supports IP lookups.")
+    r = http_get(f"https://internetdb.shodan.io/{target}")
+    if r.status_code == 404:
+        return ok([{"label": "Result", "value": "No data indexed for this IP."}])
+    if r.status_code != 200:
+        return fail(f"Shodan InternetDB returned HTTP {r.status_code}")
+    data = r.json()
+    items = [
+        {"label": "Open ports", "value": ", ".join(str(p) for p in data.get("ports", []))},
+        {"label": "Hostnames", "value": ", ".join(data.get("hostnames", []))},
+        {"label": "CPEs", "value": ", ".join(data.get("cpes", []))},
+        {"label": "Known CVEs", "value": ", ".join(data.get("vulns", []))},
+        {"label": "Tags", "value": ", ".join(data.get("tags", []))},
+    ]
+    items = [i for i in items if i["value"]]
+    return ok(items or [{"label": "Result", "value": "No data indexed for this IP."}], data)
+
+
 def lookup_shodan(target, input_type, api_key):
     if not api_key:
         return fail("Shodan requires an API key (add one in the key settings).")
@@ -351,6 +371,7 @@ LIVE_LOOKUPS = {
     "wayback": lookup_wayback,
     "nvd": lookup_nvd,
     "ipinfo": lookup_ipinfo,
+    "internetdb": lookup_internetdb,
     "shodan": lookup_shodan,
     "virustotal": lookup_virustotal,
     "abuseipdb": lookup_abuseipdb,
@@ -369,6 +390,10 @@ LIVE_LOOKUPS = {
 GRAPH_MAX_IPS = 5
 GRAPH_MAX_PORTS_PER_IP = 20
 GRAPH_MAX_CVES_PER_SOFTWARE = 3
+# InternetDB's vulns list can run into the hundreds for an old, unpatched
+# host — each one needs its own NVD detail call (the API has no bulk
+# multi-ID lookup), so this caps it well under NVD's public rate limit.
+GRAPH_MAX_VULNS_PER_HOST = 6
 
 
 def _resolve_domain(domain):
@@ -386,6 +411,28 @@ def _fetch_shodan_host(ip, api_key):
     return r.json()
 
 
+def _fetch_internetdb(ip):
+    # Shodan's free, no-key, no-rate-limit lookup — a lighter version of
+    # the full host API used when no Shodan key is available.
+    r = http_get(f"https://internetdb.shodan.io/{ip}")
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+
+def _cpe_to_label(cpe):
+    # InternetDB returns CPE 2.2 style: "cpe:/a:vendor:product:version"
+    # (not the colon-delimited 2.3 style) — split on ":" after the
+    # "cpe:/" prefix to get part/vendor/product/version.
+    body = cpe[5:] if cpe.startswith("cpe:/") else cpe
+    parts = body.split(":")
+    if len(parts) < 3:
+        return cpe
+    product = parts[2].replace("_", " ")
+    version = parts[3] if len(parts) > 3 and parts[3] else ""
+    return f"{product} {version}".strip()
+
+
 def _nvd_top_cves(keyword, limit=GRAPH_MAX_CVES_PER_SOFTWARE):
     r = http_get(
         "https://services.nvd.nist.gov/rest/json/cves/2.0",
@@ -396,6 +443,16 @@ def _nvd_top_cves(keyword, limit=GRAPH_MAX_CVES_PER_SOFTWARE):
     vulns = r.json().get("vulnerabilities", [])
     vulns.sort(key=lambda v: _cve_best_score(v.get("cve", {})), reverse=True)
     return vulns[:limit]
+
+
+def _nvd_cve_by_id(cve_id):
+    r = http_get(
+        "https://services.nvd.nist.gov/rest/json/cves/2.0", params={"cveId": cve_id}
+    )
+    if r.status_code != 200:
+        return None
+    vulns = r.json().get("vulnerabilities", [])
+    return vulns[0].get("cve") if vulns else None
 
 
 def build_graph(domain, shodan_key):
@@ -421,72 +478,132 @@ def build_graph(domain, shodan_key):
     if not ips:
         return {"nodes": list(nodes.values()), "edges": edges, "note": "Domain did not resolve to an IP."}
 
-    note = None if shodan_key else "Add a Shodan API key to expand ports, software, and CVEs."
-    # Tracked across all IPs, not reset per-IP: the same software commonly
-    # shows up on more than one IP for the same domain, and re-querying
-    # NVD for CVEs we already fetched would waste calls against its public
+    note = None
+    # Tracked across the whole build, not reset per-IP/per-host: the same
+    # software or CVE commonly shows up more than once, and re-querying
+    # NVD for one we already fetched would waste calls against its public
     # rate limit for no new information.
     seen_software = set()
+    seen_cves = {}  # cve_id -> node_id
+
+    def add_cve_node(cve_id_str, score, desc):
+        cve_node_id = f"cve:{cve_id_str}"
+        if cve_id_str not in seen_cves:
+            add_node(
+                cve_node_id,
+                "cve",
+                f"{cve_id_str} ({score if score is not None and score >= 0 else '?'})",
+                score=score,
+                desc=(desc or "")[:400],
+            )
+            seen_cves[cve_id_str] = cve_node_id
+        return seen_cves[cve_id_str]
 
     for ip in ips[:GRAPH_MAX_IPS]:
         ip_id = f"ip:{ip}"
         add_node(ip_id, "ip", ip)
         add_edge(domain_id, ip_id, "RESOLVES_TO")
 
-        if not shodan_key:
-            continue
-        try:
-            host = _fetch_shodan_host(ip, shodan_key)
-        except requests.RequestException:
-            host = None
-        if not host:
+        if shodan_key:
+            try:
+                host = _fetch_shodan_host(ip, shodan_key)
+            except requests.RequestException:
+                host = None
+            if not host:
+                continue
+
+            for svc in host.get("data", [])[:GRAPH_MAX_PORTS_PER_IP]:
+                port = svc.get("port")
+                if port is None:
+                    continue
+                port_id = f"port:{ip}:{port}"
+                add_node(port_id, "port", f"{ip}:{port}")
+                add_edge(ip_id, port_id, "HAS_PORT")
+
+                product = svc.get("product")
+                if not product:
+                    continue
+                software_label = f"{product} {svc.get('version', '')}".strip()
+                software_id = f"software:{software_label}"
+                add_node(software_id, "software", software_label)
+                add_edge(port_id, software_id, "RUNS_SOFTWARE")
+
+                if software_label in seen_software:
+                    continue
+                seen_software.add(software_label)
+                try:
+                    # NVD keywordSearch does literal text matching against
+                    # CVE descriptions, which almost never contain an exact
+                    # "product version" phrase (they describe version
+                    # ranges in prose) — searching on the product name
+                    # alone is what actually returns matches.
+                    cves = _nvd_top_cves(product)
+                except requests.RequestException:
+                    cves = []
+                for cve in cves:
+                    cve_data = cve.get("cve", {})
+                    cve_id_str = cve_data.get("id")
+                    if not cve_id_str:
+                        continue
+                    descs = cve_data.get("descriptions", [])
+                    desc = next((d["value"] for d in descs if d.get("lang") == "en"), "")
+                    cve_node_id = add_cve_node(cve_id_str, _cve_best_score(cve_data), desc)
+                    add_edge(software_id, cve_node_id, "VULNERABLE_TO")
             continue
 
-        for svc in host.get("data", [])[:GRAPH_MAX_PORTS_PER_IP]:
-            port = svc.get("port")
-            if port is None:
-                continue
+        # No Shodan key: fall back to Shodan's free InternetDB endpoint.
+        # It's coarser (host-level ports/CPEs/vulns, not per-port) but
+        # needs no key, and its vulns are Shodan's own CPE-version-matched
+        # results — more accurate than our keyword search above, which
+        # can't account for version at all.
+        note = "No per-port software mapping without a Shodan key — using free InternetDB (host-level only)."
+        try:
+            idb = _fetch_internetdb(ip)
+        except requests.RequestException:
+            idb = None
+        if not idb:
+            continue
+
+        port_ids = []
+        for port in idb.get("ports", [])[:GRAPH_MAX_PORTS_PER_IP]:
             port_id = f"port:{ip}:{port}"
             add_node(port_id, "port", f"{ip}:{port}")
             add_edge(ip_id, port_id, "HAS_PORT")
+            port_ids.append(port_id)
 
-            product = svc.get("product")
-            if not product:
-                continue
-            software_label = f"{product} {svc.get('version', '')}".strip()
-            software_id = f"software:{software_label}"
-            add_node(software_id, "software", software_label)
-            add_edge(port_id, software_id, "RUNS_SOFTWARE")
+        software_ids = []
+        for cpe in idb.get("cpes", [])[:GRAPH_MAX_PORTS_PER_IP]:
+            label = _cpe_to_label(cpe)
+            software_id = f"software:{label}"
+            add_node(software_id, "software", label)
+            software_ids.append(software_id)
+            for port_id in port_ids:
+                add_edge(port_id, software_id, "RUNS_SOFTWARE")
 
-            if software_label in seen_software:
-                continue
-            seen_software.add(software_label)
-            try:
-                # NVD keywordSearch does literal text matching against CVE
-                # descriptions, which almost never contain an exact
-                # "product version" phrase (they describe version ranges
-                # in prose) — searching on the product name alone is what
-                # actually returns matches.
-                cves = _nvd_top_cves(product)
-            except requests.RequestException:
-                cves = []
-            for cve in cves:
-                cve_data = cve.get("cve", {})
-                cve_id_str = cve_data.get("id")
-                if not cve_id_str:
-                    continue
-                score = _cve_best_score(cve_data)
-                descs = cve_data.get("descriptions", [])
-                desc = next((d["value"] for d in descs if d.get("lang") == "en"), "")
-                cve_node_id = f"cve:{cve_id_str}"
-                add_node(
-                    cve_node_id,
-                    "cve",
-                    f"{cve_id_str} ({score if score >= 0 else '?'})",
-                    score=score,
-                    desc=desc[:400],
-                )
-                add_edge(software_id, cve_node_id, "VULNERABLE_TO")
+        # No per-CVE severity from InternetDB without a per-CVE NVD call,
+        # and hosts can have hundreds of vulns — sort by CVE year
+        # (newest first) as a cheap, honest proxy for "more likely to
+        # still be relevant" before paying for a bounded number of exact
+        # NVD lookups.
+        vulns = idb.get("vulns", [])
+        vulns.sort(key=lambda v: v.split("-")[1] if v.count("-") >= 2 else "0", reverse=True)
+        for cve_id_str in vulns[:GRAPH_MAX_VULNS_PER_HOST]:
+            if cve_id_str not in seen_cves:
+                try:
+                    cve_data = _nvd_cve_by_id(cve_id_str)
+                except requests.RequestException:
+                    cve_data = None
+                score = _cve_best_score(cve_data) if cve_data else None
+                desc = ""
+                if cve_data:
+                    descs = cve_data.get("descriptions", [])
+                    desc = next((d["value"] for d in descs if d.get("lang") == "en"), "")
+                cve_node_id = add_cve_node(cve_id_str, score, desc)
+            else:
+                cve_node_id = seen_cves[cve_id_str]
+            targets = software_ids or [ip_id]
+            for target_id in targets:
+                add_edge(target_id, cve_node_id, "VULNERABLE_TO")
 
     return {"nodes": list(nodes.values()), "edges": edges, "note": note}
 

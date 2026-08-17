@@ -28,7 +28,8 @@ querying these services.
 ## Live (no key needed)
 
 crt.sh, URLScan.io, Wayback Machine, NVD (CVE keyword search), IPinfo,
-HIBP domain-breach search.
+HIBP domain-breach search, Shodan InternetDB (free ports/CPEs/CVEs
+lookup — no key, no rate limit, lighter than the full Shodan API).
 
 ## Live (bring your own API key)
 
@@ -38,11 +39,23 @@ Shodan, VirusTotal, AbuseIPDB, GreyNoise, SecurityTrails.
 
 The **Graph** button builds a visual map for a domain: domain &rarr;
 resolved IP(s) &rarr; open ports &rarr; detected software &rarr; matching
-CVEs, correlated from DNS resolution, Shodan, and NVD keyword search.
-Ports/software/CVEs need a Shodan key (same one used by the Shodan
-lookup card) — without one you'll just see domain &rarr; IP. Click a
+CVEs, correlated from DNS resolution and either Shodan or NVD. Click a
 CVE node to ask the AI assistant about it. Rendered with a small
 hand-rolled force-directed layout, no charting library or CDN involved.
+
+Two data sources depending on whether you've set a Shodan key (under
+**API Keys**):
+- **With a Shodan key** — the full host API gives per-port
+  product/version detail; CVEs are found via an NVD keyword search on
+  the product name (NVD's keyword search has no version awareness, so
+  this can surface CVEs for versions other than the one actually
+  running).
+- **Without one** — falls back to Shodan's free InternetDB endpoint
+  (no key, no rate limit). Coarser: ports, software, and CVEs are all
+  host-level rather than mapped to a specific port. Its CVE list is
+  Shodan's own CPE-version-matched result (usually more accurate than
+  the keyword-search path above), fetched by exact CVE ID from NVD —
+  capped to 6 per host since a single old host can have hundreds.
 
 ## Running locally
 
