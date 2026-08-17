@@ -428,7 +428,26 @@
       if (n.type === "cve") {
         g.style.cursor = "pointer";
         g.addEventListener("click", () => {
-          askAI(`What is ${n.label.split(" ")[0]} and how serious is it?`);
+          const cveId = n.label.split(" ")[0];
+          openAIPanel();
+          if (n.desc) {
+            // Show the real NVD description we already fetched building
+            // this graph — works even with no AI backend running, and
+            // grounds the AI's explanation below instead of asking a
+            // small local model to recall a specific CVE from memory,
+            // which it mostly can't do reliably except for very famous
+            // ones (and can hallucinate for the rest).
+            appendAIBubble("assistant ai-data", `${cveId} — NVD description:\n${n.desc}`);
+            askAI(`In plain language: what does this mean, and how serious is it in practice?`, {
+              endpoint: "/api/ai/chat",
+              extraBody: { context: `CVE: ${cveId}\nCVSS: ${n.score ?? "unknown"}\nNVD description: ${n.desc}` },
+            });
+          } else {
+            appendAIBubble(
+              "assistant ai-data",
+              `No cached NVD description for ${cveId} in this graph. Try the NVD lookup card with "${cveId}" as a keyword.`
+            );
+          }
         });
       }
 

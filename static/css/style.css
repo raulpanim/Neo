@@ -329,6 +329,11 @@ dialog#graph-modal::backdrop { background: rgba(0, 0, 0, 0.5); }
   border: 1px solid var(--border);
 }
 
+.ai-data {
+  border-left: 3px solid var(--live);
+  font-size: 0.82rem;
+}
+
 .ai-pending { opacity: 0.7; font-style: italic; }
 .ai-error { color: var(--error); border-color: var(--error); }
 

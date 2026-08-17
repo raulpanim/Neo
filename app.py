@@ -402,9 +402,9 @@ def build_graph(domain, shodan_key):
     nodes = {}
     edges = []
 
-    def add_node(node_id, node_type, label):
+    def add_node(node_id, node_type, label, **extra):
         if node_id not in nodes:
-            nodes[node_id] = {"id": node_id, "type": node_type, "label": label}
+            nodes[node_id] = {"id": node_id, "type": node_type, "label": label, **extra}
 
     seen_edges = set()
 
@@ -476,8 +476,16 @@ def build_graph(domain, shodan_key):
                 if not cve_id_str:
                     continue
                 score = _cve_best_score(cve_data)
+                descs = cve_data.get("descriptions", [])
+                desc = next((d["value"] for d in descs if d.get("lang") == "en"), "")
                 cve_node_id = f"cve:{cve_id_str}"
-                add_node(cve_node_id, "cve", f"{cve_id_str} ({score if score >= 0 else '?'})")
+                add_node(
+                    cve_node_id,
+                    "cve",
+                    f"{cve_id_str} ({score if score >= 0 else '?'})",
+                    score=score,
+                    desc=desc[:400],
+                )
                 add_edge(software_id, cve_node_id, "VULNERABLE_TO")
 
     return {"nodes": list(nodes.values()), "edges": edges, "note": note}
@@ -530,17 +538,19 @@ def api_lookup(service):
 
 
 AI_MESSAGE_MAX_LEN = 4000
+AI_CONTEXT_MAX_LEN = 2000
 
 
 @app.route("/api/ai/chat", methods=["POST"])
 def api_ai_chat():
     body = request.get_json(silent=True) or {}
     message = (body.get("message") or "").strip()
+    context = (body.get("context") or "").strip()[:AI_CONTEXT_MAX_LEN] or None
     if not message or len(message) > AI_MESSAGE_MAX_LEN:
         return jsonify(
             {"ok": False, "error": f"Message is required (max {AI_MESSAGE_MAX_LEN} chars).", "reply": None, "sources": []}
         ), 400
-    return jsonify(ai.chat(message))
+    return jsonify(ai.chat(message, extra_context=context))
 
 
 @app.route("/api/ai/explain", methods=["POST"])
