@@ -161,24 +161,40 @@ def lookup_wayback(target, input_type, api_key):
     return ok(items, records[:20])
 
 
+def _cve_best_score(cve):
+    metrics = cve.get("metrics", {})
+    for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+        for m in metrics.get(key, []):
+            score = m.get("cvssData", {}).get("baseScore")
+            if score is not None:
+                return score
+    return -1  # no scoring data yet (e.g. very recently published) sorts last
+
+
 def lookup_nvd(target, input_type, api_key):
     if input_type != "keyword":
         return fail("NVD only supports keyword lookups.")
     r = http_get(
         "https://services.nvd.nist.gov/rest/json/cves/2.0",
-        params={"keywordSearch": target, "resultsPerPage": 10},
+        # Fetch a wider pool than we display so sorting by severity below
+        # isn't just re-ordering whatever 10 NVD happened to return first
+        # (its default order is oldest-published-first, not by severity).
+        params={"keywordSearch": target, "resultsPerPage": 50},
     )
     if r.status_code != 200:
         return fail(f"NVD returned HTTP {r.status_code} (rate-limited without an API key)")
     data = r.json()
     vulns = data.get("vulnerabilities", [])
+    vulns.sort(key=lambda v: _cve_best_score(v.get("cve", {})), reverse=True)
     items = []
     for v in vulns[:10]:
         cve = v.get("cve", {})
         cve_id = cve.get("id", "?")
+        score = _cve_best_score(cve)
         descs = cve.get("descriptions", [])
         desc = next((d["value"] for d in descs if d.get("lang") == "en"), "")
-        items.append({"label": cve_id, "value": desc[:200]})
+        label = f"{cve_id} (CVSS {score})" if score >= 0 else f"{cve_id} (unscored)"
+        items.append({"label": label, "value": desc[:200]})
     return ok(items or [{"label": "Result", "value": "No matching CVEs found."}], vulns[:10])
 
 
