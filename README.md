@@ -73,6 +73,27 @@ leaves the dashboard — including your API keys flow and every live
 lookup — open to anyone on that network with no login. The app prints a
 warning at startup if it detects that combination.
 
+**HTTPS is on by default for any non-loopback bind.** Basic Auth sends
+your password (and every API key you type in) as plain base64 — not
+encrypted — so without TLS anyone else on the same Wi-Fi can read them
+straight off the wire. As soon as `HOST` isn't `127.0.0.1`/`localhost`,
+Neo automatically serves over HTTPS with a temporary self-signed
+certificate — your browser will show a security warning the first time
+(expected, since it's not signed by a public CA); click through it.
+
+For a certificate your browser won't warn about, generate one with
+[mkcert](https://github.com/FiloSottile/mkcert) and point Neo at it:
+
+```bash
+export NEO_TLS_CERT=/path/to/cert.pem
+export NEO_TLS_KEY=/path/to/key.pem
+```
+
+If you're terminating TLS yourself in a reverse proxy (Caddy, nginx) in
+front of this app, set `NEO_TLS=0` to skip the built-in self-signed
+cert — but only if that proxy is actually handling HTTPS, otherwise
+you're back to serving everything in the clear.
+
 Other environment variables: `PORT` (default `5000`), `FLASK_DEBUG=1` to
 enable Werkzeug's interactive debugger for local development only —
 never combine it with a non-loopback `HOST`, since the debugger allows

@@ -574,10 +574,37 @@ def api_ai_explain():
     return jsonify(ai.chat(message, extra_context=context))
 
 
+def _resolve_ssl_context(host):
+    """
+    Decide whether to serve HTTPS. Without it, NEO_AUTH_PASSWORD and every
+    API key typed into the dashboard travel in cleartext HTTP Basic Auth —
+    trivially sniffable by anyone else on the same network, which defeats
+    the point of requiring a password at all on a shared/travel router.
+    """
+    cert = os.environ.get("NEO_TLS_CERT")
+    key = os.environ.get("NEO_TLS_KEY")
+    if cert and key:
+        return (cert, key)
+
+    tls_env = os.environ.get("NEO_TLS", "").strip().lower()
+    if tls_env in ("0", "off", "false"):
+        return None
+    if tls_env in ("1", "on", "true"):
+        return "adhoc"
+
+    # Default: auto-enable a self-signed cert for any non-loopback bind,
+    # opt-out only. Loopback-only use is unaffected (no TLS by default,
+    # same as before) since there's no shared-network sniffing risk.
+    if host not in ("127.0.0.1", "localhost"):
+        return "adhoc"
+    return None
+
+
 if __name__ == "__main__":
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "5000"))
     debug = os.environ.get("FLASK_DEBUG") == "1"
+    ssl_context = _resolve_ssl_context(host)
 
     if host not in ("127.0.0.1", "localhost") and not AUTH_PASSWORD:
         print(
@@ -592,5 +619,22 @@ if __name__ == "__main__":
             "arbitrary code execution to anyone who can reach it. Do not "
             "combine FLASK_DEBUG=1 with HOST=0.0.0.0 outside local dev.",
         )
+    if ssl_context == "adhoc":
+        print(
+            "Using a temporary self-signed certificate (HTTPS). Your "
+            "browser will show a security warning the first time — "
+            "expected for a self-hosted tool with no public CA cert, "
+            "click through it. Set NEO_TLS_CERT/NEO_TLS_KEY for a "
+            "persistent cert (e.g. from mkcert), or NEO_TLS=0 if you're "
+            "terminating TLS yourself in a reverse proxy in front of this.",
+        )
+    elif ssl_context is None and host not in ("127.0.0.1", "localhost"):
+        print(
+            "WARNING: serving plain HTTP on a non-loopback host with TLS "
+            "explicitly disabled (NEO_TLS=0) — only do this if something "
+            "else in front of this app (e.g. a reverse proxy) terminates "
+            "HTTPS, otherwise your password and API keys travel in the "
+            "clear over this network.",
+        )
 
-    app.run(debug=debug, host=host, port=port)
+    app.run(debug=debug, host=host, port=port, ssl_context=ssl_context)
