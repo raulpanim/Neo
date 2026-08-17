@@ -34,6 +34,16 @@ HIBP domain-breach search.
 
 Shodan, VirusTotal, AbuseIPDB, GreyNoise, SecurityTrails.
 
+## Relationship graph
+
+The **Graph** button builds a visual map for a domain: domain &rarr;
+resolved IP(s) &rarr; open ports &rarr; detected software &rarr; matching
+CVEs, correlated from DNS resolution, Shodan, and NVD keyword search.
+Ports/software/CVEs need a Shodan key (same one used by the Shodan
+lookup card) — without one you'll just see domain &rarr; IP. Click a
+CVE node to ask the AI assistant about it. Rendered with a small
+hand-rolled force-directed layout, no charting library or CDN involved.
+
 ## Running locally
 
 ```bash
