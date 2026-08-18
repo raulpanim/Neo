@@ -112,6 +112,28 @@ enable Werkzeug's interactive debugger for local development only —
 never combine it with a non-loopback `HOST`, since the debugger allows
 arbitrary code execution to anyone who can reach it.
 
+## Deploying to Render
+
+`render.yaml` in the repo root is a ready-to-use
+[Blueprint](https://render.com/docs/blueprint-spec):
+
+1. On [render.com](https://render.com), **New +** → **Blueprint**, connect
+   this GitHub repo/branch. Render detects `render.yaml` automatically.
+2. It provisions a free web service running
+   `gunicorn app:app --bind 0.0.0.0:$PORT` — a real production WSGI
+   server, not Flask's own dev server — and generates a random
+   `NEO_AUTH_PASSWORD` for you (copy it from the service's
+   **Environment** tab after the first deploy; username can be anything).
+3. Render terminates HTTPS itself at its edge, so this app's own
+   self-signed-TLS logic never runs here (it only lives in the
+   `if __name__ == "__main__"` block, which gunicorn never executes) —
+   you get real, trusted HTTPS for free with no extra config.
+
+The **offline AI assistant** won't work on Render — there's no Ollama
+running there, and no realistic way to run one on a free web service.
+Every other lookup, and the relationship graph, works the same as
+local/Pi use.
+
 ## Offline AI assistant (optional)
 
 Neo can include a chat panel and per-result "Explain with AI" button
